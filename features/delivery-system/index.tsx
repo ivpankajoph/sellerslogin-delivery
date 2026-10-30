@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from '@/lib/router'
 import type { RootState } from '@/store'
 import {
   ArrowRight,
+  ClipboardList,
   Headphones,
   LayoutDashboard,
   Loader2,
@@ -23,6 +24,14 @@ import api from '@/lib/axios'
 import { formatINR } from '@/lib/currency'
 import { ShellFrame } from '@/components/shell-frame'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Collapsible,
@@ -44,6 +53,7 @@ import {
   SidebarMenuSubButton,
 } from '@/components/ui/sidebar'
 import {
+  fetchCourierWarehouses,
   fetchExternalDelhiveryShipments,
   loadCourierOrders,
   type ExternalDelhiveryShipment,
@@ -53,7 +63,10 @@ import {
   hasAnyActiveCourierAssignment,
   type CourierOrderSummary,
 } from '@/features/delivery-system/lib/data'
+import { CreateOrderPanel } from './components/create-order-panel'
+import { DeliveryPromoBanner } from './components/promo-banner'
 import { ServiceOrdersPanel } from './components/service-orders-panel'
+import { WebsiteOrdersPanel } from './components/website-orders-panel'
 import { CourierListPage } from '@/features/courier/list'
 import { DeliveryMarkupPanel } from './delivery-markup-panel'
 import { DeliverySupportPanel } from './delivery-support-panel'
@@ -64,6 +77,8 @@ type DeliveryView =
   | 'delivery-markup'
   | 'service-orders'
   | 'website-requests'
+  | 'website-orders'
+  | 'create-order'
 type DeliveryWorkspaceSection =
   | 'dashboard'
   | 'orders'
@@ -80,6 +95,8 @@ type DeliveryWorkspaceSection =
   | 'support'
   | 'book-vehicle'
   | 'service-orders'
+  | 'website-orders'
+  | 'create-order'
   | 'services'
 
 const readText = (value: unknown) => String(value ?? '').trim()
@@ -337,8 +354,12 @@ export function DeliveryWorkspaceShell({
   const isAdmin = role === 'admin' || role === 'superadmin'
 
   const [walletBalance, setWalletBalance] = useState<number | null>(null)
+  const [warehousePromptOpen, setWarehousePromptOpen] = useState(false)
   const [requestsOpen, setRequestsOpen] = useState(
     activeSection === 'service-orders' || activeSection === 'courier-list'
+  )
+  const [ordersOpen, setOrdersOpen] = useState(
+    activeSection === 'website-orders' || activeSection === 'create-order'
   )
 
   const fetchWallet = async () => {
@@ -369,10 +390,30 @@ export function DeliveryWorkspaceShell({
 
   const requestsGroupActive =
     activeSection === 'service-orders' || activeSection === 'courier-list'
+  const ordersGroupActive =
+    activeSection === 'website-orders' || activeSection === 'create-order'
 
   useEffect(() => {
     if (requestsGroupActive) setRequestsOpen(true)
   }, [requestsGroupActive])
+
+  useEffect(() => {
+    if (ordersGroupActive) setOrdersOpen(true)
+  }, [ordersGroupActive])
+
+  const openCreateOrder = async (serviceId = 'd2c') => {
+    try {
+      const rows = await fetchCourierWarehouses()
+      if (!rows.length) {
+        setWarehousePromptOpen(true)
+        return
+      }
+    } catch {
+      setWarehousePromptOpen(true)
+      return
+    }
+    openPath(`/delivery-system?view=create-order&service=${serviceId}`)
+  }
 
   const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL || 'http://localhost:5173'
 
@@ -479,6 +520,50 @@ export function DeliveryWorkspaceShell({
                   </SidebarMenuItem>
                 </Collapsible>
 
+                <Collapsible
+                  open={ordersOpen}
+                  onOpenChange={setOrdersOpen}
+                  className='group/collapsible'
+                >
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
+                        isActive={ordersGroupActive}
+                        tooltip='All Orders'
+                        className='h-10 cursor-pointer text-sm hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+                      >
+                        <ClipboardList />
+                        <span>All Orders</span>
+                        <ChevronDown className='ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180' />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub className='mt-1 ml-3 border-l border-border pl-2'>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            isActive={activeSection === 'website-orders'}
+                            onClick={() =>
+                              openPath('/delivery-system?view=website-orders')
+                            }
+                            className='h-9 w-full cursor-pointer text-sm hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+                          >
+                            <span>Website order</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            isActive={activeSection === 'create-order'}
+                            onClick={() => void openCreateOrder()}
+                            className='h-9 w-full cursor-pointer text-sm hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+                          >
+                            <span>Create your order</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+
                 {!isAdmin ? (
                   <SidebarMenuItem>
                     <SidebarMenuButton
@@ -550,6 +635,26 @@ export function DeliveryWorkspaceShell({
         </>
       }
     >
+      <Dialog open={warehousePromptOpen} onOpenChange={setWarehousePromptOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create a warehouse first</DialogTitle>
+            <DialogDescription>
+              Create your order stays locked until a pickup warehouse exists. Add one warehouse, then you can create an order and request delivery.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                setWarehousePromptOpen(false)
+                openPath('/courier/warehouses')
+              }}
+            >
+              Create warehouse
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {children}
     </ShellFrame>
   )
@@ -646,7 +751,11 @@ export function DeliverySystemDashboard() {
             ? 'service-orders'
             : view === 'website-requests'
               ? 'website-requests'
-              : 'dashboard'
+              : view === 'website-orders'
+                ? 'website-orders'
+                : view === 'create-order'
+                  ? 'create-order'
+                  : 'dashboard'
     )
   }, [searchStr])
 
@@ -680,7 +789,11 @@ export function DeliverySystemDashboard() {
                 ? activeView === 'website-requests'
                   ? 'courier-list'
                   : 'service-orders'
-                : 'dashboard'
+                : activeView === 'website-orders'
+                  ? 'website-orders'
+                  : activeView === 'create-order'
+                    ? 'create-order'
+                    : 'dashboard'
       }
     >
       {error ? (
@@ -691,20 +804,33 @@ export function DeliverySystemDashboard() {
 
       {activeView === 'dashboard' ? (
         <div className='space-y-6'>
-          <Card>
-            <CardHeader>
-              <CardTitle>Delivery workspace</CardTitle>
-              <CardDescription>
-                Start with creating and shipping your first order.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className='flex flex-wrap gap-2'>
-              <Button onClick={() => openPath('/courier')}>
-                Check price for delivery
-                <ArrowRight />
-              </Button>
-            </CardContent>
-          </Card>
+          <DeliveryPromoBanner />
+          <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-4'>
+            {DELIVERY_SERVICE_CATALOG.map((service) => {
+              const Icon = service.icon
+              return (
+                <button
+                  key={service.id}
+                  type='button'
+                  onClick={() =>
+                    openPath(`/delivery-system?view=create-order&service=${service.id}`)
+                  }
+                  className='flex h-full flex-col rounded-xl border bg-card p-5 text-left shadow-sm transition hover:bg-muted/40'
+                >
+                  <span className='flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground'>
+                    <Icon className='size-5' />
+                  </span>
+                  <span className='mt-4 text-sm font-semibold text-primary'>{service.badge}</span>
+                  <span className='mt-1 text-base font-semibold'>{service.title}</span>
+                  <span className='mt-2 text-sm text-muted-foreground'>{service.bestFor}</span>
+                  <span className='mt-auto inline-flex items-center gap-2 pt-4 text-sm font-medium'>
+                    Create order
+                    <ArrowRight className='size-4' />
+                  </span>
+                </button>
+              )
+            })}
+          </div>
 
           <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
             <StatTile label='Total orders' value={loading ? '...' : stats.totalOrders} />
@@ -767,6 +893,24 @@ export function DeliverySystemDashboard() {
         <ServiceOrdersPanel />
       ) : activeView === 'website-requests' ? (
         <CourierListPage />
+      ) : activeView === 'website-orders' ? (
+        <WebsiteOrdersPanel
+          orders={orders}
+          loading={loading}
+          onDeliver={(order) =>
+            openPath(`/delivery-system?view=create-order&orderId=${order.id}&service=d2c`)
+          }
+        />
+      ) : activeView === 'create-order' ? (
+        <CreateOrderPanel
+          service={
+            DELIVERY_SERVICE_CATALOG.find((service) => service.id === new URLSearchParams(searchStr).get('service')) ||
+            DELIVERY_SERVICE_CATALOG[2]
+          }
+          existingOrder={orders.find((order) => order.id === new URLSearchParams(searchStr).get('orderId')) || null}
+          onCreateWarehouse={() => openPath('/courier/warehouses')}
+          onPlaced={() => openPath('/delivery-system?view=service-orders')}
+        />
       ) : null}
     </DeliveryWorkspaceShell>
   )
