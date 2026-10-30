@@ -81,10 +81,7 @@ export function DeliveryPromoBanner() {
           <g key={item.step}>
             <rect x={item.x} y="254" width="336" height="112" rx="16" fill="#ffffff" />
             <foreignObject x={item.x + 18} y="268" width="300" height="86">
-              <div
-                xmlns="http://www.w3.org/1999/xhtml"
-                style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif", color: "#163024" }}
-              >
+              <div style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif", color: "#163024" }}>
                 <div style={{ color: "#3caf74", fontWeight: 700, fontSize: 16 }}>{item.step}</div>
                 <div style={{ marginTop: 4, fontWeight: 700, fontSize: 18, lineHeight: 1.25 }}>{item.title}</div>
                 <div style={{ marginTop: 4, color: "#5f6f66", fontSize: 15, lineHeight: 1.3 }}>{item.text}</div>
