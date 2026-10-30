@@ -20,13 +20,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   Table,
   TableBody,
   TableCell,
@@ -43,6 +36,7 @@ import {
   updateShadowfaxWarehouse,
   type CourierWarehouse,
 } from '@/features/delivery-system/lib/api'
+import { IndianStateSelect } from '@/features/delivery-system/components/indian-state-select'
 import type { RootState } from '@/store'
 
 type WarehouseForm = {
@@ -112,45 +106,6 @@ const defaultShadowfaxForm: ShadowfaxWarehouseForm = {
 }
 
 const WORKING_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-
-const INDIAN_STATES = [
-  'Andaman and Nicobar Islands',
-  'Andhra Pradesh',
-  'Arunachal Pradesh',
-  'Assam',
-  'Bihar',
-  'Chandigarh',
-  'Chhattisgarh',
-  'Dadra and Nagar Haveli and Daman and Diu',
-  'Delhi',
-  'Goa',
-  'Gujarat',
-  'Haryana',
-  'Himachal Pradesh',
-  'Jammu and Kashmir',
-  'Jharkhand',
-  'Karnataka',
-  'Kerala',
-  'Ladakh',
-  'Lakshadweep',
-  'Madhya Pradesh',
-  'Maharashtra',
-  'Manipur',
-  'Meghalaya',
-  'Mizoram',
-  'Nagaland',
-  'Odisha',
-  'Puducherry',
-  'Punjab',
-  'Rajasthan',
-  'Sikkim',
-  'Tamil Nadu',
-  'Telangana',
-  'Tripura',
-  'Uttar Pradesh',
-  'Uttarakhand',
-  'West Bengal',
-]
 
 const toggleDay = (days: string[], day: string) =>
   days.includes(day) ? days.filter((entry) => entry !== day) : [...days, day]
@@ -537,7 +492,13 @@ export function CourierWarehouseManagePage() {
                   <div className='sm:col-span-2'><Label>Return address*</Label><Textarea className='min-h-[78px] rounded-md' placeholder='Return address*' value={createForm.return_address} onChange={(e) => setCreateForm((c) => ({ ...c, return_address: e.target.value }))} /></div>
                   <div><Label>Return city</Label><Input placeholder='Return city' value={createForm.return_city} onChange={(e) => setCreateForm((c) => ({ ...c, return_city: e.target.value }))} /></div>
                   <div><Label>Return pin</Label><Input placeholder='Return pin' value={createForm.return_pin} onChange={(e) => setCreateForm((c) => ({ ...c, return_pin: e.target.value }))} /></div>
-                  <div><Label>Return state</Label><Input placeholder='Return state' value={createForm.return_state} onChange={(e) => setCreateForm((c) => ({ ...c, return_state: e.target.value }))} /></div>
+                  <div>
+                    <Label>Return state</Label>
+                    <IndianStateSelect
+                      value={createForm.return_state}
+                      onChange={(value) => setCreateForm((c) => ({ ...c, return_state: value }))}
+                    />
+                  </div>
                   <div><Label>Return country</Label><Input placeholder='Return country' value={createForm.return_country} onChange={(e) => setCreateForm((c) => ({ ...c, return_country: e.target.value }))} /></div>
                 </>
               ) : null}
@@ -630,13 +591,6 @@ function ShadowfaxWarehouseFields({
   setForm: Dispatch<SetStateAction<ShadowfaxWarehouseForm>>
 }) {
   const [locating, setLocating] = useState(false)
-  const stateOptions = useMemo(
-    () =>
-      form.state && !INDIAN_STATES.includes(form.state)
-        ? [form.state, ...INDIAN_STATES]
-        : INDIAN_STATES,
-    [form.state]
-  )
 
   useEffect(() => {
     setForm((c) => {
@@ -683,21 +637,10 @@ function ShadowfaxWarehouseFields({
       <div><Label>City*</Label><Input placeholder='City*' value={form.city} onChange={(e) => setForm((c) => ({ ...c, city: e.target.value }))} /></div>
       <div>
         <Label>State*</Label>
-        <Select
+        <IndianStateSelect
           value={form.state}
-          onValueChange={(value) => setForm((c) => ({ ...c, state: value }))}
-        >
-          <SelectTrigger className='h-11 w-full rounded-md'>
-            <SelectValue placeholder='Select state' />
-          </SelectTrigger>
-          <SelectContent>
-            {stateOptions.map((state) => (
-              <SelectItem key={state} value={state}>
-                {state}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          onChange={(value) => setForm((c) => ({ ...c, state: value }))}
+        />
       </div>
       <div><Label>Pincode*</Label><Input placeholder='Pincode*' value={form.pincode} onChange={(e) => setForm((c) => ({ ...c, pincode: e.target.value }))} /></div>
       <div><Label>Latitude (optional)</Label><Input placeholder='Latitude' value={form.latitude} onChange={(e) => setForm((c) => ({ ...c, latitude: e.target.value }))} /></div>

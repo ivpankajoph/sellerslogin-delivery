@@ -36,6 +36,7 @@ import {
   estimateCourierQuote,
   type CourierOrderSummary,
 } from "@/features/delivery-system/lib/data"
+import { IndianStateSelect } from "@/features/delivery-system/components/indian-state-select"
 import api from "@/lib/axios"
 import { formatINR } from "@/lib/currency"
 
@@ -423,7 +424,17 @@ export function CreateOrderPanel({
               ["phone", "Phone"],
               ["address", "Address"],
               ["city", "City"],
-              ["state", "State"],
+            ] as const).map(([key, label]) => (
+              <div key={key} className="space-y-2">
+                <Label>{label}</Label>
+                <Input value={form[key]} onChange={(event) => setField(key, event.target.value)} />
+              </div>
+            ))}
+            <div className="space-y-2">
+              <Label>State</Label>
+              <IndianStateSelect value={form.state} onChange={(value) => setField("state", value)} />
+            </div>
+            {([
               ["pincode", "Pincode"],
               ["itemName", "Item"],
               ["quantity", "Quantity"],
