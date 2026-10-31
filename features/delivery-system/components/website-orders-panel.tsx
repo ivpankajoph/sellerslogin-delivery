@@ -1,6 +1,8 @@
 "use client"
 
+import { useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { FacetFilter, matchesDateRange, matchesSearch, matchesSelected, TableFilters, uniqueFilterOptions } from "@/components/table-filters"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
@@ -23,6 +25,24 @@ export function WebsiteOrdersPanel({
   onDeliver: (order: CourierOrderSummary) => void
 }) {
   const websiteOrders = orders.filter((order) => order.source === "template-orders")
+  const [search, setSearch] = useState("")
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
+  const [statuses, setStatuses] = useState<string[]>([])
+  const [websites, setWebsites] = useState<string[]>([])
+  const [cities, setCities] = useState<string[]>([])
+  const toggle = (setter: (value: string[]) => void, selected: string[], value: string) =>
+    setter(selected.includes(value) ? selected.filter((entry) => entry !== value) : [...selected, value])
+  const filtered = useMemo(
+    () => websiteOrders.filter((order) =>
+      matchesSelected(statuses, order.status || "pending") &&
+      matchesSelected(websites, order.websiteLabel || "Template website") &&
+      matchesSelected(cities, order.city || "City not set") &&
+      matchesDateRange(order.createdAt, dateFrom, dateTo) &&
+      matchesSearch(search, [order.orderNumber, order.customerName, order.customerPhone, order.pincode, order.total])
+    ),
+    [cities, dateFrom, dateTo, search, statuses, websiteOrders, websites]
+  )
 
   return (
     <Card>
@@ -33,8 +53,23 @@ export function WebsiteOrdersPanel({
         </CardDescription>
       </CardHeader>
       <CardContent>
+        <TableFilters
+          search={search}
+          onSearchChange={setSearch}
+          placeholder="Search order, customer, pincode"
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
+          active={Boolean(search || dateFrom || dateTo || statuses.length || websites.length || cities.length)}
+          onReset={() => { setSearch(""); setDateFrom(""); setDateTo(""); setStatuses([]); setWebsites([]); setCities([]) }}
+        >
+          <FacetFilter title="Status" options={uniqueFilterOptions(websiteOrders.map((order) => order.status || "pending"))} selected={statuses} onToggle={(value) => toggle(setStatuses, statuses, value)} onClear={() => setStatuses([])} />
+          <FacetFilter title="Website" options={uniqueFilterOptions(websiteOrders.map((order) => order.websiteLabel || "Template website"))} selected={websites} onToggle={(value) => toggle(setWebsites, websites, value)} onClear={() => setWebsites([])} />
+          <FacetFilter title="City" options={uniqueFilterOptions(websiteOrders.map((order) => order.city || "City not set"))} selected={cities} onToggle={(value) => toggle(setCities, cities, value)} onClear={() => setCities([])} />
+        </TableFilters>
         <p className="mb-3 text-sm text-muted-foreground">
-          {loading ? "Loading orders..." : `${websiteOrders.length} website orders`}
+          {loading ? "Loading orders..." : `${filtered.length} of ${websiteOrders.length} website orders`}
         </p>
         <Table>
           <TableHeader>
@@ -48,7 +83,7 @@ export function WebsiteOrdersPanel({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {websiteOrders.map((order) => (
+            {filtered.map((order) => (
               <TableRow key={order.id}>
                 <TableCell>
                   <p className="font-medium">{order.orderNumber}</p>
@@ -70,7 +105,7 @@ export function WebsiteOrdersPanel({
                 </TableCell>
               </TableRow>
             ))}
-            {!loading && !websiteOrders.length ? (
+            {!loading && !filtered.length ? (
               <TableRow>
                 <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                   No website orders yet.

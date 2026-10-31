@@ -4,6 +4,7 @@ import { CalendarPlus, Download, ExternalLink, LoaderCircle, RefreshCcw } from '
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
+import { FacetFilter, matchesSearch, matchesSelected, TableFilters, uniqueFilterOptions } from '@/components/table-filters'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -431,9 +432,18 @@ export function CourierListPage() {
     )
   }, [orders, selectedShipment])
 
+  const [sourceFilters, setSourceFilters] = useState<string[]>([])
+  const [statusFilters, setStatusFilters] = useState<string[]>([])
+  const toggleList = (setter: (value: string[]) => void, selected: string[], value: string) =>
+    setter(selected.includes(value) ? selected.filter((entry) => entry !== value) : [...selected, value])
   const filteredShipmentRows = useMemo(
-    () => shipmentRows.filter((shipment) => matchesDateRange(shipment.updatedAt, datePreset, customFrom, customTo)),
-    [customFrom, customTo, datePreset, shipmentRows]
+    () => shipmentRows.filter((shipment) =>
+      matchesDateRange(shipment.updatedAt, datePreset, customFrom, customTo) &&
+      matchesSelected(sourceFilters, shipment.sourceLabel) &&
+      matchesSelected(statusFilters, shipment.trackingStatus) &&
+      matchesSearch(searchQuery, [shipment.title, shipment.customerPrimary, shipment.customerSecondary, shipment.destinationLabel, shipment.trackingCode, shipment.itemsLabel])
+    ),
+    [customFrom, customTo, datePreset, searchQuery, shipmentRows, sourceFilters, statusFilters]
   )
 
   const orderForDetails = useMemo(
@@ -586,16 +596,20 @@ export function CourierListPage() {
                 <CardTitle>Website requests</CardTitle>
                 <CardDescription>Courier shipments created from website orders.</CardDescription>
               </div>
-              <div className='flex w-full flex-wrap items-center gap-2'>
-                <Input
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder='Search order, customer, tracking'
-                  className='min-w-[240px] flex-1'
-                />
-                <Input type='date' value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} className='w-[160px]' />
-                <Input type='date' value={customTo} onChange={(event) => setCustomTo(event.target.value)} className='w-[160px]' />
-              </div>
+              <TableFilters
+                search={searchQuery}
+                onSearchChange={setSearchQuery}
+                placeholder="Search order, customer, tracking"
+                dateFrom={customFrom}
+                dateTo={customTo}
+                onDateFromChange={setCustomFrom}
+                onDateToChange={setCustomTo}
+                active={Boolean(searchQuery || sourceFilters.length || statusFilters.length || customFrom || customTo)}
+                onReset={() => { setSearchQuery(''); setSourceFilters([]); setStatusFilters([]); setCustomFrom(''); setCustomTo('') }}
+              >
+                <FacetFilter title="Type" options={uniqueFilterOptions(shipmentRows.map((shipment) => shipment.sourceLabel))} selected={sourceFilters} onToggle={(value) => toggleList(setSourceFilters, sourceFilters, value)} onClear={() => setSourceFilters([])} />
+                <FacetFilter title="Status" options={uniqueFilterOptions(shipmentRows.map((shipment) => shipment.trackingStatus))} selected={statusFilters} onToggle={(value) => toggleList(setStatusFilters, statusFilters, value)} onClear={() => setStatusFilters([])} />
+              </TableFilters>
             </CardHeader>
             <CardContent className='space-y-4'>
             <p className='text-sm text-muted-foreground'>{filteredShipmentRows.length} requests showing</p>

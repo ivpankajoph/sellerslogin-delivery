@@ -66,6 +66,7 @@ import {
 import { CreateOrderPanel } from './components/create-order-panel'
 import { DeliveryPromoBanner } from './components/promo-banner'
 import { ServiceOrdersPanel } from './components/service-orders-panel'
+import { ManualOrdersPanel } from './components/manual-orders-panel'
 import { WebsiteOrdersPanel } from './components/website-orders-panel'
 import { CourierListPage } from '@/features/courier/list'
 import { DeliveryMarkupPanel } from './delivery-markup-panel'
@@ -78,6 +79,7 @@ type DeliveryView =
   | 'service-orders'
   | 'website-requests'
   | 'website-orders'
+  | 'manual-orders'
   | 'create-order'
 type DeliveryWorkspaceSection =
   | 'dashboard'
@@ -96,6 +98,7 @@ type DeliveryWorkspaceSection =
   | 'book-vehicle'
   | 'service-orders'
   | 'website-orders'
+  | 'manual-orders'
   | 'create-order'
   | 'services'
 
@@ -359,7 +362,9 @@ export function DeliveryWorkspaceShell({
     activeSection === 'service-orders' || activeSection === 'courier-list'
   )
   const [ordersOpen, setOrdersOpen] = useState(
-    activeSection === 'website-orders' || activeSection === 'create-order'
+    activeSection === 'website-orders' ||
+      activeSection === 'manual-orders' ||
+      activeSection === 'create-order'
   )
 
   const fetchWallet = async () => {
@@ -391,7 +396,9 @@ export function DeliveryWorkspaceShell({
   const requestsGroupActive =
     activeSection === 'service-orders' || activeSection === 'courier-list'
   const ordersGroupActive =
-    activeSection === 'website-orders' || activeSection === 'create-order'
+    activeSection === 'website-orders' ||
+    activeSection === 'manual-orders' ||
+    activeSection === 'create-order'
 
   useEffect(() => {
     if (requestsGroupActive) setRequestsOpen(true)
@@ -539,6 +546,15 @@ export function DeliveryWorkspaceShell({
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarMenuSub className='mt-1 ml-3 border-l border-border pl-2'>
+                           <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            isActive={activeSection === 'create-order'}
+                            onClick={() => void openCreateOrder()}
+                            className='h-9 w-full cursor-pointer text-sm hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+                          >
+                            <span>Create your order</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
                         <SidebarMenuSubItem>
                           <SidebarMenuSubButton
                             isActive={activeSection === 'website-orders'}
@@ -552,13 +568,16 @@ export function DeliveryWorkspaceShell({
                         </SidebarMenuSubItem>
                         <SidebarMenuSubItem>
                           <SidebarMenuSubButton
-                            isActive={activeSection === 'create-order'}
-                            onClick={() => void openCreateOrder()}
+                            isActive={activeSection === 'manual-orders'}
+                            onClick={() =>
+                              openPath('/delivery-system?view=manual-orders')
+                            }
                             className='h-9 w-full cursor-pointer text-sm hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
                           >
-                            <span>Create your order</span>
+                            <span>Manual order</span>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
+                     
                       </SidebarMenuSub>
                     </CollapsibleContent>
                   </SidebarMenuItem>
@@ -678,6 +697,7 @@ export function DeliverySystemDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
+  const [deliveryTarget, setDeliveryTarget] = useState<CourierOrderSummary | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -753,6 +773,8 @@ export function DeliverySystemDashboard() {
               ? 'website-requests'
               : view === 'website-orders'
                 ? 'website-orders'
+                : view === 'manual-orders'
+                  ? 'manual-orders'
                 : view === 'create-order'
                   ? 'create-order'
                   : 'dashboard'
@@ -791,6 +813,8 @@ export function DeliverySystemDashboard() {
                   : 'service-orders'
                 : activeView === 'website-orders'
                   ? 'website-orders'
+                  : activeView === 'manual-orders'
+                    ? 'manual-orders'
                   : activeView === 'create-order'
                     ? 'create-order'
                     : 'dashboard'
@@ -897,9 +921,14 @@ export function DeliverySystemDashboard() {
         <WebsiteOrdersPanel
           orders={orders}
           loading={loading}
-          onDeliver={(order) =>
-            openPath(`/delivery-system?view=create-order&orderId=${order.id}&service=d2c`)
-          }
+          onDeliver={setDeliveryTarget}
+        />
+      ) : activeView === 'manual-orders' ? (
+        <ManualOrdersPanel
+          orders={orders}
+          loading={loading}
+          onCreate={() => openPath('/delivery-system?view=create-order&service=local')}
+          onDeliver={setDeliveryTarget}
         />
       ) : activeView === 'create-order' ? (
         <CreateOrderPanel
@@ -912,6 +941,44 @@ export function DeliverySystemDashboard() {
           onPlaced={() => openPath('/delivery-system?view=service-orders')}
         />
       ) : null}
+      <Dialog open={Boolean(deliveryTarget)} onOpenChange={(open) => { if (!open) setDeliveryTarget(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request delivery</DialogTitle>
+            <DialogDescription>
+              {deliveryTarget
+                ? `Choose a delivery type for ${deliveryTarget.orderNumber}.`
+                : 'Choose a delivery type.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className='grid gap-2'>
+            {DELIVERY_SERVICE_CATALOG.map((service) => {
+              const Icon = service.icon
+              return (
+                <button
+                  key={service.id}
+                  type='button'
+                  onClick={() => {
+                    if (!deliveryTarget) return
+                    openPath(`/delivery-system?view=create-order&orderId=${deliveryTarget.id}&service=${service.id}`)
+                    setDeliveryTarget(null)
+                  }}
+                  className='flex items-center gap-3 rounded-lg border p-3 text-left transition hover:bg-muted/50'
+                >
+                  <span className='flex size-10 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground'>
+                    <Icon className='size-5' />
+                  </span>
+                  <span className='min-w-0'>
+                    <span className='block text-sm font-semibold text-primary'>{service.badge}</span>
+                    <span className='block text-sm font-medium'>{service.title}</span>
+                    <span className='block text-sm text-muted-foreground'>{service.bestFor}</span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
     </DeliveryWorkspaceShell>
   )
 }

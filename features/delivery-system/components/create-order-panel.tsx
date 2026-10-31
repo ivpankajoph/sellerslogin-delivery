@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ComponentProps } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,11 +32,9 @@ import {
   previewDeliveryMarkup,
   type CourierWarehouse,
 } from "@/features/delivery-system/lib/api"
-import {
-  estimateCourierQuote,
-  type CourierOrderSummary,
-} from "@/features/delivery-system/lib/data"
+import { type CourierOrderSummary } from "@/features/delivery-system/lib/data"
 import { IndianStateSelect } from "@/features/delivery-system/components/indian-state-select"
+import { LocalShadowfaxPanel } from "@/features/delivery-system/components/local-shadowfax-panel"
 import api from "@/lib/axios"
 import { formatINR } from "@/lib/currency"
 
@@ -71,9 +69,16 @@ const emptyForm = {
   itemName: "",
   quantity: "1",
   amount: "",
+  weight: "500",
+  length: "10",
+  breadth: "10",
+  height: "10",
+  payment: "Pre-paid",
+  mode: "S",
+  packageType: "box",
 }
 
-export function CreateOrderPanel({
+function ParcelCreateOrderPanel({
   service,
   existingOrder,
   onPlaced,
@@ -126,6 +131,13 @@ export function CreateOrderPanel({
       itemName: existingOrder.items?.[0]?.productName || "Website order",
       quantity: String(existingOrder.itemsCount || 1),
       amount: String(existingOrder.total || ""),
+      weight: "500",
+      length: "10",
+      breadth: "10",
+      height: "10",
+      payment: "Pre-paid",
+      mode: "S",
+      packageType: "box",
     })
   }, [existingOrder])
 
@@ -153,43 +165,19 @@ export function CreateOrderPanel({
     setChecking(true)
     setQuotes([])
     try {
-      const quoteOrder: CourierOrderSummary = existingOrder || {
-        id: "draft",
-        orderNumber: "Draft",
-        source: "orders",
-        customerName: form.name,
-        customerPhone: form.phone,
-        customerEmail: "",
-        total: Number(form.amount || 0),
-        deliveryCost: 0,
-        actualDeliveryCost: 0,
-        itemsCount: Number(form.quantity || 1),
-        createdAt: "",
-        address: form.address,
-        city: form.city,
-        state: form.state,
-        pincode: form.pincode,
-        status: "pending",
-        deliveryProvider: "",
-        trackingUrl: "",
-        externalDeliveryId: "",
-        websiteLabel: "",
-        items: [],
-      }
-
       const [delhivery, delhiveryEstimate, shadowfax, bookingEstimate] = await Promise.allSettled([
         fetchDelhiveryB2cServiceability(form.pincode),
         fetchDelhiveryShippingEstimate({
-          md: "S",
-          cgm: "500",
+          md: form.mode === "E" ? "E" : "S",
+          cgm: form.weight || "500",
           o_pin: originPin,
           d_pin: form.pincode,
           ss: "Delivered",
-          pt: "Pre-paid",
-          l: "10",
-          b: "10",
-          h: "10",
-          ipkg_type: "box",
+          pt: form.payment === "COD" ? "COD" : "Pre-paid",
+          l: form.length || "10",
+          b: form.breadth || "10",
+          h: form.height || "10",
+          ipkg_type: form.packageType === "flyer" ? "flyer" : "box",
         }),
         fetchShadowfaxServiceability({
           pincodes: form.pincode,
@@ -237,41 +225,35 @@ export function CreateOrderPanel({
             order_number: existingOrder?.orderNumber,
           }).catch(() => null)
         : null
-      const delhiveryPrice = Number(delhiveryMarkup?.hiked_price || delhiveryCharge || 0)
+      const delhiveryPrice = Number(delhiveryCharge || 0)
+      const delhiveryWallet = Number(delhiveryMarkup?.hiked_price || 0)
       const delhiveryServiceable =
         delhivery.status === "fulfilled" && Boolean(delhivery.value?.serviceability?.serviceable)
       next.push({
         id: "delhivery",
         title: "Delhivery",
         price: delhiveryPrice,
-        eta: "1-3 days",
+        eta: form.mode === "E" ? "Express" : "Surface",
         vehicle: service.id === "d2c" ? "Parcel Surface" : service.vehicleOptions[0],
         partner: "delhivery",
-        summary: delhiveryServiceable
-          ? "Customer pincode is serviceable."
-          : "Delhivery did not confirm this pincode.",
+        summary: delhiveryCharge
+          ? `Delhivery invoice API${delhiveryWallet && delhiveryWallet !== delhiveryPrice ? `. Wallet charge ${formatINR(delhiveryWallet)}` : ""}.`
+          : delhiveryServiceable
+            ? "Pincode is serviceable, but Delhivery did not return a charge."
+            : "Delhivery did not confirm this pincode.",
       })
 
-      const shadowfaxLocal = estimateCourierQuote(quoteOrder, "shadowfax")
-      const shadowfaxMarkup = shadowfaxLocal.amount
-        ? await previewDeliveryMarkup({
-            partner_id: "shadowfax",
-            actual_price: shadowfaxLocal.amount,
-            order_id: existingOrder?.id,
-            order_number: existingOrder?.orderNumber,
-          }).catch(() => null)
-        : null
       const shadowfaxServiceable =
         shadowfax.status === "fulfilled" && Boolean(shadowfax.value?.serviceability?.serviceable)
       next.push({
         id: "shadowfax",
         title: "Shadowfax",
-        price: Number(shadowfaxMarkup?.hiked_price || shadowfaxLocal.amount || 0),
-        eta: shadowfaxLocal.etaLabel,
-        vehicle: service.id === "local" ? "Bike" : service.vehicleOptions[0],
+        price: 0,
+        eta: "Not quoted",
+        vehicle: service.vehicleOptions[0],
         partner: "shadowfax",
         summary: shadowfaxServiceable
-          ? "Customer pincode is serviceable."
+          ? "Pincode is serviceable. Shadowfax does not return a shipping price before the order is booked."
           : "Shadowfax did not confirm this pincode.",
       })
 
@@ -328,9 +310,67 @@ export function CreateOrderPanel({
       }
       if (!order) throw new Error("Order could not be created")
 
+      let waybill = ""
+      if (selectedQuote.partner === "delhivery") {
+        const shipment = await createDelhiveryShipment(order, {
+          price_quote: selectedQuote.price,
+          actual_price_quote: selectedQuote.price,
+          pickup_location: warehouse.name,
+          payment_mode: form.payment === "COD" ? "COD" : "Prepaid",
+          return_name: warehouse.name,
+          return_phone: warehouse.phone || (warehouse as { contact?: string }).contact || "",
+          return_add: warehouseAddress(warehouse),
+          return_city: warehouse.city || "",
+          return_state: readText((warehouse as { state?: string; return_state?: string }).state || (warehouse as { return_state?: string }).return_state),
+          return_pin: originPin,
+          return_country: "India",
+        })
+        waybill = readText(
+          shipment?.shipment?.waybill ||
+            shipment?.order?.delhivery?.waybill ||
+            shipment?.order?.delhivery?.waybills?.[0]
+        )
+        if (!waybill) throw new Error("Delhivery did not return a waybill")
+      }
+
+      if (selectedQuote.partner === "shadowfax") {
+        const shadowfaxWarehouse = warehouse.provider === "shadowfax"
+        const shipment = await createShadowfaxShipment(order, {
+          order_model: shadowfaxWarehouse ? "warehouse" : "marketplace",
+          actual_weight: Number(form.weight || 500),
+          volumetric_weight: Number(form.weight || 500),
+          payment_mode: form.payment === "COD" ? "cod" : "prepaid",
+          pickup_name: warehouse.name,
+          pickup_contact: warehouse.phone || (warehouse as { contact?: string }).contact || "",
+          pickup_address_line_1: warehouseAddress(warehouse),
+          pickup_city: warehouse.city || "",
+          pickup_state: readText((warehouse as { state?: string }).state || form.state),
+          pickup_pincode: originPin,
+          pickup_unique_code: readText((warehouse as { unique_code?: string }).unique_code),
+          rts_name: warehouse.name,
+          rts_contact: warehouse.phone || (warehouse as { contact?: string }).contact || "",
+          rts_address_line_1: warehouseAddress(warehouse),
+          rts_city: warehouse.city || "",
+          rts_state: readText((warehouse as { state?: string }).state || form.state),
+          rts_pincode: originPin,
+          rts_unique_code: readText((warehouse as { unique_code?: string }).unique_code),
+        })
+        waybill = readText(
+          shipment?.shipment?.tracking_number ||
+            shipment?.shipment?.awb_number ||
+            shipment?.order?.shadowfax?.tracking_number
+        )
+        if (!waybill) throw new Error(shipment?.message || "Shadowfax did not return a waybill")
+      }
+
       const booking = await api.post("/delivery-bookings", {
         service_id: service.id,
         vehicle: selectedQuote.vehicle,
+        partner: selectedQuote.partner,
+        estimated_price: selectedQuote.price,
+        external_id: waybill,
+        waybill,
+        source_order_id: order.id,
         vendor_name: warehouse.name,
         pickup: {
           name: warehouse.name,
@@ -355,17 +395,6 @@ export function CreateOrderPanel({
           weight_kg: 1,
         },
       })
-
-      if (selectedQuote.partner === "delhivery") {
-        await createDelhiveryShipment(order).catch((error) => {
-          toast.error(error?.response?.data?.message || "Delhivery request was saved, but the shipment call failed.")
-        })
-      }
-      if (selectedQuote.partner === "shadowfax") {
-        await createShadowfaxShipment(order).catch((error) => {
-          toast.error(error?.response?.data?.message || "Shadowfax request was saved, but the shipment call failed.")
-        })
-      }
 
       if (!booking?.data?.success) {
         throw new Error(booking?.data?.message || "Delivery request was not saved")
@@ -398,9 +427,10 @@ export function CreateOrderPanel({
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>{existingOrder ? "Request delivery" : "Create your order"}</CardTitle>
+            <p className="text-sm font-semibold text-primary">{service.badge}</p>
+            <CardTitle>{service.title}</CardTitle>
             <CardDescription>
-              {service.title}. Pickup comes from your warehouse. Price, distance, and timing use Delhivery and Shadowfax.
+              {existingOrder ? `Request delivery for ${existingOrder.orderNumber}.` : "Create your order."} Pickup comes from your warehouse. Delhivery price is their invoice charge for the weight and box size below.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
@@ -439,12 +469,46 @@ export function CreateOrderPanel({
               ["itemName", "Item"],
               ["quantity", "Quantity"],
               ["amount", "Order value"],
+              ["weight", "Weight (grams)"],
+              ["length", "Length (cm)"],
+              ["breadth", "Breadth (cm)"],
+              ["height", "Height (cm)"],
             ] as const).map(([key, label]) => (
               <div key={key} className="space-y-2">
                 <Label>{label}</Label>
-                <Input value={form[key]} onChange={(event) => setField(key, event.target.value)} />
+                <Input value={form[key]} onChange={(event) => setField(key, event.target.value)} inputMode="decimal" />
               </div>
             ))}
+            <div className="space-y-2">
+              <Label>Payment</Label>
+              <Select value={form.payment} onValueChange={(value) => setField("payment", value)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Pre-paid">Prepaid</SelectItem>
+                  <SelectItem value="COD">COD</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Delhivery mode</Label>
+              <Select value={form.mode} onValueChange={(value) => setField("mode", value)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="S">Surface</SelectItem>
+                  <SelectItem value="E">Express</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Package type</Label>
+              <Select value={form.packageType} onValueChange={(value) => setField("packageType", value)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="box">Box</SelectItem>
+                  <SelectItem value="flyer">Flyer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="md:col-span-2">
               <Button onClick={() => void checkPrice()} disabled={checking || !warehouse}>
                 {checking ? "Checking price..." : "Check price and route"}
@@ -491,4 +555,13 @@ export function CreateOrderPanel({
       </div>
     </>
   )
+}
+
+export function CreateOrderPanel(
+  props: ComponentProps<typeof ParcelCreateOrderPanel>
+) {
+  if (props.service.id === "local") {
+    return <LocalShadowfaxPanel {...props} />
+  }
+  return <ParcelCreateOrderPanel {...props} />
 }

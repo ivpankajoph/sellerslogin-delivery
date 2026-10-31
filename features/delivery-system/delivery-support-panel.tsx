@@ -24,6 +24,7 @@ import api from '@/lib/axios'
 import { uploadImage as uploadImageToR2 } from '@/lib/media-upload'
 import { formatINR } from '@/lib/currency'
 import { Badge } from '@/components/ui/badge'
+import { FacetFilter, matchesDateRange, matchesSelected, TableFilters, uniqueFilterOptions } from '@/components/table-filters'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -232,7 +233,12 @@ export function DeliverySupportPanel({
   const [tickets, setTickets] = useState<DeliveryTicket[]>([])
   const [loadingTickets, setLoadingTickets] = useState(false)
   const [ticketSearch, setTicketSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | TicketStatus>('all')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [ticketStatuses, setTicketStatuses] = useState<string[]>([])
+  const [priorities, setPriorities] = useState<string[]>([])
+  const toggleTicket = (setter: (value: string[]) => void, selected: string[], value: string) =>
+    setter(selected.includes(value) ? selected.filter((entry) => entry !== value) : [...selected, value])
   const [createOpen, setCreateOpen] = useState(false)
   const [selectedOrderId, setSelectedOrderId] = useState('')
   const [subject, setSubject] = useState('')
@@ -257,7 +263,9 @@ export function DeliverySupportPanel({
   const visibleTickets = useMemo(() => {
     const query = ticketSearch.trim().toLowerCase()
     return tickets.filter((ticket) => {
-      if (statusFilter !== 'all' && ticket.status !== statusFilter) return false
+      if (!matchesDateRange(ticket.updatedAt || ticket.createdAt, dateFrom, dateTo)) return false
+      if (!matchesSelected(ticketStatuses, ticket.status)) return false
+      if (!matchesSelected(priorities, ticket.priority)) return false
       if (!query) return true
       return [
         ticket._id,
@@ -270,7 +278,7 @@ export function DeliverySupportPanel({
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query))
     })
-  }, [statusFilter, ticketSearch, tickets])
+  }, [dateFrom, dateTo, priorities, ticketSearch, ticketStatuses, tickets])
 
   const stats = useMemo(
     () => ({
@@ -547,31 +555,20 @@ export function DeliverySupportPanel({
               <CardTitle>
                 {isAdmin ? 'All Delivery Tickets' : 'My Delivery Tickets'}
               </CardTitle>
-              <div className='flex flex-wrap gap-2'>
-                <Input
-                  className='h-10 w-[280px]'
-                  placeholder='Search ticket, order, vendor'
-                  value={ticketSearch}
-                  onChange={(event) => setTicketSearch(event.target.value)}
-                />
-                <Select
-                  value={statusFilter}
-                  onValueChange={(value) =>
-                    setStatusFilter(value as 'all' | TicketStatus)
-                  }
-                >
-                  <SelectTrigger className='h-10 w-[170px]'>
-                    <SelectValue placeholder='All status' />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                </div>
+              <TableFilters
+                search={ticketSearch}
+                onSearchChange={setTicketSearch}
+                placeholder="Search ticket, order, vendor"
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+                onDateFromChange={setDateFrom}
+                onDateToChange={setDateTo}
+                active={Boolean(ticketSearch || dateFrom || dateTo || ticketStatuses.length || priorities.length)}
+                onReset={() => { setTicketSearch(''); setDateFrom(''); setDateTo(''); setTicketStatuses([]); setPriorities([]) }}
+              >
+                <FacetFilter title="Status" options={uniqueFilterOptions(tickets.map((ticket) => ticket.status))} selected={ticketStatuses} onToggle={(value) => toggleTicket(setTicketStatuses, ticketStatuses, value)} onClear={() => setTicketStatuses([])} />
+                <FacetFilter title="Priority" options={uniqueFilterOptions(tickets.map((ticket) => ticket.priority))} selected={priorities} onToggle={(value) => toggleTicket(setPriorities, priorities, value)} onClear={() => setPriorities([])} />
+              </TableFilters>
             </CardHeader>
             <CardContent className='space-y-4'>
             <p className='text-sm text-muted-foreground'>{visibleTickets.length} tickets showing</p>

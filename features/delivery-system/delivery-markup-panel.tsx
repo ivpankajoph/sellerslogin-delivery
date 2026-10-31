@@ -4,6 +4,7 @@ import { Save } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
+import { FacetFilter, matchesDateRange, matchesSearch, matchesSelected, TableFilters, uniqueFilterOptions } from '@/components/table-filters'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -80,6 +81,22 @@ export function DeliveryMarkupPanel() {
   const [markups, setMarkups] = useState<Markup[]>(defaultMarkups)
   const [history, setHistory] = useState<HistoryRow[]>([])
   const [loading, setLoading] = useState(false)
+  const [historySearch, setHistorySearch] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [partners, setPartners] = useState<string[]>([])
+  const [markupTypes, setMarkupTypes] = useState<string[]>([])
+  const toggleHistory = (setter: (value: string[]) => void, selected: string[], value: string) =>
+    setter(selected.includes(value) ? selected.filter((entry) => entry !== value) : [...selected, value])
+  const visibleHistory = useMemo(
+    () => history.filter((row) =>
+      matchesSelected(partners, row.partner_id || 'all') &&
+      matchesSelected(markupTypes, row.markup_type || 'percentage') &&
+      matchesDateRange(row.createdAt, dateFrom, dateTo) &&
+      matchesSearch(historySearch, [row.order_number, row.partner_id, row.actual_price, row.hiked_price])
+    ),
+    [dateFrom, dateTo, history, historySearch, markupTypes, partners]
+  )
 
   const byPartner = useMemo(
     () => new Map(markups.map((entry) => [entry.partner_id, entry])),
@@ -271,6 +288,20 @@ export function DeliveryMarkupPanel() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <TableFilters
+            search={historySearch}
+            onSearchChange={setHistorySearch}
+            placeholder="Search order or partner"
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+            active={Boolean(historySearch || dateFrom || dateTo || partners.length || markupTypes.length)}
+            onReset={() => { setHistorySearch(''); setDateFrom(''); setDateTo(''); setPartners([]); setMarkupTypes([]) }}
+          >
+            <FacetFilter title="Partner" options={uniqueFilterOptions(history.map((row) => row.partner_id || 'all'))} selected={partners} onToggle={(value) => toggleHistory(setPartners, partners, value)} onClear={() => setPartners([])} />
+            <FacetFilter title="Markup" options={uniqueFilterOptions(history.map((row) => row.markup_type || 'percentage'))} selected={markupTypes} onToggle={(value) => toggleHistory(setMarkupTypes, markupTypes, value)} onClear={() => setMarkupTypes([])} />
+          </TableFilters>
           <Table>
             <TableHeader>
               <TableRow>
@@ -283,7 +314,7 @@ export function DeliveryMarkupPanel() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {history.map((row) => (
+              {visibleHistory.map((row) => (
                 <TableRow key={row._id || `${row.order_number}-${row.createdAt}`}>
                   <TableCell className='capitalize'>{row.partner_id || 'all'}</TableCell>
                   <TableCell>{row.order_number || 'Not available'}</TableCell>
@@ -301,7 +332,7 @@ export function DeliveryMarkupPanel() {
                   </TableCell>
                 </TableRow>
               ))}
-              {!history.length ? (
+              {!visibleHistory.length ? (
                 <TableRow>
                   <TableCell className='text-muted-foreground' colSpan={6}>
                     No price history yet.

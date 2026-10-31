@@ -6,6 +6,7 @@ import type { Dispatch, SetStateAction } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
+import { FacetFilter, matchesDateRange, matchesSearch, matchesSelected, TableFilters, uniqueFilterOptions } from '@/components/table-filters'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -178,6 +179,24 @@ export function CourierWarehouseManagePage() {
       }),
     [warehouses]
   )
+  const [warehouseSearch, setWarehouseSearch] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [providers, setProviders] = useState<string[]>([])
+  const [cities, setCities] = useState<string[]>([])
+  const [pins, setPins] = useState<string[]>([])
+  const toggleWarehouse = (setter: (value: string[]) => void, selected: string[], value: string) =>
+    setter(selected.includes(value) ? selected.filter((entry) => entry !== value) : [...selected, value])
+  const visibleWarehouses = useMemo(
+    () => orderedWarehouses.filter((warehouse) =>
+      matchesSelected(providers, warehouse.provider === 'shadowfax' ? 'Shadowfax' : 'Delhivery') &&
+      matchesSelected(cities, warehouse.city || 'No city') &&
+      matchesSelected(pins, warehouse.pin || 'No pin') &&
+      matchesDateRange(warehouse.updatedAt, dateFrom, dateTo) &&
+      matchesSearch(warehouseSearch, [warehouse.name, warehouse.phone, warehouse.address, warehouse.pin])
+    ),
+    [cities, dateFrom, dateTo, orderedWarehouses, pins, providers, warehouseSearch]
+  )
 
   const onCreate = async () => {
     if (createProvider === 'shadowfax') {
@@ -306,9 +325,24 @@ export function CourierWarehouseManagePage() {
 
         <Card>
           <CardContent>
+          <TableFilters
+            search={warehouseSearch}
+            onSearchChange={setWarehouseSearch}
+            placeholder="Search name, phone, address"
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+            active={Boolean(warehouseSearch || dateFrom || dateTo || providers.length || cities.length || pins.length)}
+            onReset={() => { setWarehouseSearch(''); setDateFrom(''); setDateTo(''); setProviders([]); setCities([]); setPins([]) }}
+          >
+            <FacetFilter title="Provider" options={uniqueFilterOptions(orderedWarehouses.map((warehouse) => warehouse.provider === 'shadowfax' ? 'Shadowfax' : 'Delhivery'))} selected={providers} onToggle={(value) => toggleWarehouse(setProviders, providers, value)} onClear={() => setProviders([])} />
+            <FacetFilter title="City" options={uniqueFilterOptions(orderedWarehouses.map((warehouse) => warehouse.city || 'No city'))} selected={cities} onToggle={(value) => toggleWarehouse(setCities, cities, value)} onClear={() => setCities([])} />
+            <FacetFilter title="Pin" options={uniqueFilterOptions(orderedWarehouses.map((warehouse) => warehouse.pin || 'No pin'))} selected={pins} onToggle={(value) => toggleWarehouse(setPins, pins, value)} onClear={() => setPins([])} />
+          </TableFilters>
           {loading ? (
             <div className='text-sm text-muted-foreground'>Loading warehouses...</div>
-          ) : orderedWarehouses.length === 0 ? (
+          ) : visibleWarehouses.length === 0 ? (
             <div className='rounded-md border border-dashed p-6 text-sm text-muted-foreground'>
               No warehouses found. Create your first warehouse.
             </div>
@@ -327,7 +361,7 @@ export function CourierWarehouseManagePage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {orderedWarehouses.map((warehouse) => (
+                {visibleWarehouses.map((warehouse) => (
                   <TableRow key={warehouse.id}>
                     <TableCell className='font-medium'>{warehouse.name}</TableCell>
                     <TableCell>

@@ -87,6 +87,8 @@ export type CourierOrderSummary = {
     payment_mode?: string
     status?: string
     status_description?: string
+    track_url?: string
+    delivery_cost?: number
     updated_at?: string
   }
 
@@ -415,7 +417,7 @@ export const normalizeCourierOrder = (
     pincode: toText(shippingAddress?.pincode) || toText(manualCustomer?.pincode),
     status: toText(order?.status) || 'pending',
     deliveryProvider: toText(order?.delivery_provider),
-    trackingUrl: toText(order?.borzo?.tracking_url),
+    trackingUrl: toText(order?.shadowfax?.track_url || order?.borzo?.tracking_url),
     externalDeliveryId: toText(
       order?.borzo?.order_id ||
         order?.delhivery?.waybill ||
@@ -489,6 +491,8 @@ export const normalizeCourierOrder = (
           payment_mode: toText(order?.shadowfax?.payment_mode),
           status: toText(order?.shadowfax?.status),
           status_description: toText(order?.shadowfax?.status_description),
+          track_url: toText(order?.shadowfax?.track_url),
+          delivery_cost: Number(order?.shadowfax?.delivery_cost || 0) || undefined,
           updated_at: toText(order?.shadowfax?.updated_at),
         }
       : undefined,

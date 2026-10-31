@@ -334,6 +334,11 @@ export const generateShadowfaxAwbs = async (payload: {
   return res?.data
 }
 
+export const generateShadowfaxLabel = async (awbNumber: string) => {
+  const res = await api.post("/shadowfax/label", { awb_number: awbNumber, file_type: "pdf" })
+  return res?.data as { label_url?: string; response?: { data?: { label_url?: string } } }
+}
+
 export const fetchShadowfaxOrderDetails = async (awbNumber: string) => {
   const res = await api.get(`/shadowfax/order/${encodeURIComponent(awbNumber)}`)
   return res?.data
@@ -586,6 +591,52 @@ export const refreshExternalDelhiveryShipment = async (shipmentId: string) => {
     success?: boolean
     shipment?: ExternalDelhiveryShipment
   }
+}
+
+const ondemandTimeout = { timeout: 60000 }
+
+export const geocodeDeliveryAddress = async (payload: Record<string, unknown>) => {
+  const res = await api.post("/shadowfax/geocode", payload, ondemandTimeout)
+  return res?.data as { success?: boolean; latitude?: number; longitude?: number }
+}
+
+export const checkHyperlocalServiceability = async (payload: Record<string, unknown>) => {
+  const res = await api.put("/shadowfax/hyperlocal/serviceability", payload, ondemandTimeout)
+  return res?.data
+}
+
+export const placeHyperlocalOrder = async (payload: Record<string, unknown>) => {
+  const res = await api.post("/shadowfax/hyperlocal/orders", payload, ondemandTimeout)
+  return res?.data
+}
+
+export const fetchHyperlocalOrder = async (sfxOrderId: string) => {
+  const res = await api.get(`/shadowfax/hyperlocal/orders/${encodeURIComponent(sfxOrderId)}`, ondemandTimeout)
+  return res?.data
+}
+
+export const cancelHyperlocalOrder = async (sfxOrderId: string, payload: Record<string, unknown>) => {
+  const res = await api.put(
+    `/shadowfax/hyperlocal/orders/${encodeURIComponent(sfxOrderId)}/cancel`,
+    payload,
+    ondemandTimeout
+  )
+  return res?.data
+}
+
+export const validateQuickCommerceOrder = async (payload: Record<string, unknown>) => {
+  const res = await api.post("/shadowfax/quick-commerce/validate", payload, ondemandTimeout)
+  return res?.data
+}
+
+export const placeQuickCommerceOrder = async (payload: Record<string, unknown>) => {
+  const res = await api.post("/shadowfax/quick-commerce/orders", payload, ondemandTimeout)
+  return res?.data
+}
+
+export const markQuickCommerceReady = async (payload: Record<string, unknown>) => {
+  const res = await api.post("/shadowfax/quick-commerce/orders/ready", payload, ondemandTimeout)
+  return res?.data
 }
 
 export const cancelExternalDelhiveryShipment = async (
