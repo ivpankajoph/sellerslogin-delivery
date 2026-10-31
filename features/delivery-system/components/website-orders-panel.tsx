@@ -74,6 +74,7 @@ export function WebsiteOrdersPanel({
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Date</TableHead>
               <TableHead>Order</TableHead>
               <TableHead>Website</TableHead>
               <TableHead>Customer</TableHead>
@@ -85,17 +86,10 @@ export function WebsiteOrdersPanel({
           <TableBody>
             {filtered.map((order) => (
               <TableRow key={order.id}>
-                <TableCell>
-                  <p className="font-medium">{order.orderNumber}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {order.city || "City not set"} {order.pincode ? `· ${order.pincode}` : ""}
-                  </p>
-                </TableCell>
-                <TableCell>{order.websiteLabel || "Template website"}</TableCell>
-                <TableCell>
-                  <p className="font-medium">{order.customerName}</p>
-                  <p className="text-sm text-muted-foreground">{order.customerPhone || "No phone"}</p>
-                </TableCell>
+                <TableCell className="whitespace-nowrap">{order.createdAt ? new Date(order.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "-"}</TableCell>
+                <TableCell className="whitespace-nowrap font-medium">{[order.orderNumber, order.city, order.pincode].filter(Boolean).join(" · ")}</TableCell>
+                <TableCell className="whitespace-nowrap">{order.websiteLabel || "Template website"}</TableCell>
+                <TableCell className="whitespace-nowrap">{[order.customerName, order.customerPhone].filter(Boolean).join(" · ")}</TableCell>
                 <TableCell className="capitalize">{order.status || "pending"}</TableCell>
                 <TableCell className="text-right">{formatINR(order.total)}</TableCell>
                 <TableCell className="text-right">
@@ -107,7 +101,7 @@ export function WebsiteOrdersPanel({
             ))}
             {!loading && !filtered.length ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                   No website orders yet.
                 </TableCell>
               </TableRow>

@@ -589,10 +589,10 @@ export function DeliverySupportPanel({
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Date</TableHead>
                     <TableHead>Ticket</TableHead>
                     <TableHead>Order</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Updated</TableHead>
                     <TableHead className='text-right'>Action</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -603,20 +603,10 @@ export function DeliverySupportPanel({
                       className='cursor-pointer'
                       onClick={() => void loadTicketDetails(ticket._id)}
                     >
-                      <TableCell>
-                        <p className='font-medium'>{ticket.subject}</p>
-                        <p className='text-muted-foreground line-clamp-1 text-xs'>
-                          {ticket.description}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        <p>{ticket.related_order?.order_number || 'No order linked'}</p>
-                        <p className='text-muted-foreground text-xs'>
-                          {ticket.related_order?.customer_name || 'Customer not available'}
-                        </p>
-                      </TableCell>
-                      <TableCell className='capitalize'>{formatStatusLabel(ticket.status)}</TableCell>
-                      <TableCell>{formatDateTime(ticket.updatedAt || ticket.createdAt)}</TableCell>
+                      <TableCell className='whitespace-nowrap'>{formatDateTime(ticket.updatedAt || ticket.createdAt)}</TableCell>
+                      <TableCell className='max-w-[280px] truncate whitespace-nowrap font-medium'>{ticket.subject}</TableCell>
+                      <TableCell className='whitespace-nowrap'>{[ticket.related_order?.order_number || 'No order linked', ticket.related_order?.customer_name].filter(Boolean).join(' · ')}</TableCell>
+                      <TableCell className='capitalize whitespace-nowrap'>{formatStatusLabel(ticket.status)}</TableCell>
                       <TableCell className='text-right'>
                         <Button
                           size='sm'

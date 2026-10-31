@@ -283,6 +283,7 @@ export function ServiceOrdersPanel() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Date</TableHead>
               <TableHead>Order ID</TableHead>
               <TableHead>Service & vehicle</TableHead>
               <TableHead>Courier</TableHead>
@@ -297,27 +298,13 @@ export function ServiceOrdersPanel() {
           <TableBody>
             {filteredOrders.map((order) => (
               <TableRow key={order.id}>
-                <TableCell>
-                  <p className="font-medium">{order.id}</p>
-                  <p className="text-muted-foreground text-xs">
-                    {new Date(order.createdAt).toLocaleString('en-IN')}
-                  </p>
-                </TableCell>
-                <TableCell>
-                  <p className="font-medium">{order.serviceTitle || order.serviceId}</p>
-                  {order.vehicle ? (
-                    <p className="text-muted-foreground text-xs">{order.vehicle}</p>
-                  ) : null}
-                </TableCell>
-                <TableCell className="capitalize">{order.partner === 'shadowfax' ? 'Shadowfax' : order.partner === 'delhivery' ? 'Delhivery' : '-'}</TableCell>
-                <TableCell>{order.vendorName || '-'}</TableCell>
-                <TableCell>
-                  <p>{order.customerName}</p>
-                  <p className="text-muted-foreground text-xs">{order.customerPhone}</p>
-                </TableCell>
-                <TableCell className="max-w-[220px] whitespace-normal">
-                  <p className="truncate">{order.destination}</p>
-                </TableCell>
+                <TableCell className="whitespace-nowrap">{order.createdAt ? new Date(order.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '-'}</TableCell>
+                <TableCell className="whitespace-nowrap font-medium">{order.id}</TableCell>
+                <TableCell className="whitespace-nowrap">{[order.serviceTitle || order.serviceId, order.vehicle].filter(Boolean).join(' · ')}</TableCell>
+                <TableCell className="whitespace-nowrap capitalize">{order.partner === 'shadowfax' ? 'Shadowfax' : order.partner === 'delhivery' ? 'Delhivery' : '-'}</TableCell>
+                <TableCell className="whitespace-nowrap">{order.vendorName || '-'}</TableCell>
+                <TableCell className="whitespace-nowrap">{[order.customerName, order.customerPhone].filter(Boolean).join(' · ') || '-'}</TableCell>
+                <TableCell className="max-w-[240px] truncate whitespace-nowrap">{order.destination}</TableCell>
                 <TableCell className="font-medium">{formatINR(order.price)}</TableCell>
                 <TableCell className="capitalize">{order.status}</TableCell>
                 <TableCell className="text-right">

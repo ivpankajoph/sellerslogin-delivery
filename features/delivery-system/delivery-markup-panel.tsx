@@ -305,18 +305,23 @@ export function DeliveryMarkupPanel() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Date</TableHead>
                 <TableHead>Partner</TableHead>
                 <TableHead>Order</TableHead>
                 <TableHead>Actual</TableHead>
                 <TableHead>Vendor price</TableHead>
                 <TableHead>Markup</TableHead>
-                <TableHead>Date</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {visibleHistory.map((row) => (
                 <TableRow key={row._id || `${row.order_number}-${row.createdAt}`}>
-                  <TableCell className='capitalize'>{row.partner_id || 'all'}</TableCell>
+                  <TableCell className='whitespace-nowrap'>
+                    {row.createdAt
+                      ? new Date(row.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+                      : 'Not available'}
+                  </TableCell>
+                  <TableCell className='whitespace-nowrap capitalize'>{row.partner_id || 'all'}</TableCell>
                   <TableCell>{row.order_number || 'Not available'}</TableCell>
                   <TableCell className='font-medium'>{formatINR(Number(row.actual_price || 0))}</TableCell>
                   <TableCell>{formatINR(Number(row.hiked_price || 0))}</TableCell>
@@ -324,11 +329,6 @@ export function DeliveryMarkupPanel() {
                     {row.markup_type === 'fixed'
                       ? formatINR(Number(row.markup_value || 0))
                       : `${row.markup_value || 0}%`}
-                  </TableCell>
-                  <TableCell>
-                    {row.createdAt
-                      ? new Date(row.createdAt).toLocaleString('en-IN')
-                      : 'Not available'}
                   </TableCell>
                 </TableRow>
               ))}

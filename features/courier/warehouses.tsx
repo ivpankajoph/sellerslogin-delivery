@@ -350,20 +350,21 @@ export function CourierWarehouseManagePage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Date</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Provider</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Pin</TableHead>
                   <TableHead>Address</TableHead>
                   <TableHead>Working Days</TableHead>
-                  <TableHead>Updated</TableHead>
                   <TableHead className='text-right'>Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {visibleWarehouses.map((warehouse) => (
                   <TableRow key={warehouse.id}>
-                    <TableCell className='font-medium'>{warehouse.name}</TableCell>
+                    <TableCell className='whitespace-nowrap'>{warehouse.updatedAt ? new Date(warehouse.updatedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'N/A'}</TableCell>
+                    <TableCell className='whitespace-nowrap font-medium'>{warehouse.name}</TableCell>
                     <TableCell>
                       <Badge variant='outline'>
                         {warehouse.provider === 'shadowfax' ? 'Shadowfax' : 'Delhivery'}
@@ -371,16 +372,13 @@ export function CourierWarehouseManagePage() {
                     </TableCell>
                     <TableCell>{warehouse.phone || 'N/A'}</TableCell>
                     <TableCell>{warehouse.pin || 'N/A'}</TableCell>
-                    <TableCell className='max-w-[320px] whitespace-normal'>
+                    <TableCell className='max-w-[320px] truncate whitespace-nowrap'>
                       {warehouse.address || 'N/A'}
                     </TableCell>
-                    <TableCell className='max-w-[260px] whitespace-normal'>
+                    <TableCell className='max-w-[260px] truncate whitespace-nowrap'>
                       {Array.isArray(warehouse.working_days) && warehouse.working_days.length
                         ? warehouse.working_days.join(', ')
                         : 'N/A'}
-                    </TableCell>
-                    <TableCell>
-                      {warehouse.updatedAt ? new Date(warehouse.updatedAt).toLocaleString('en-IN') : 'N/A'}
                     </TableCell>
                     <TableCell className='text-right'>
                       <Button

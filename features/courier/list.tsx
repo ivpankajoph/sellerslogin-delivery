@@ -616,6 +616,7 @@ export function CourierListPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Date</TableHead>
                     <TableHead>Order</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Customer</TableHead>
@@ -623,7 +624,6 @@ export function CourierListPage() {
                     <TableHead>Status</TableHead>
                     <TableHead>Tracking</TableHead>
                     <TableHead>Products</TableHead>
-                    <TableHead>Updated</TableHead>
                     <TableHead className='text-right'>Action</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -634,26 +634,18 @@ export function CourierListPage() {
                       className='cursor-pointer'
                       onClick={() => setSelectedShipment(shipment)}
                     >
-                      <TableCell>
-                        <p className='font-medium'>{shipment.title}</p>
-                        <p className='text-muted-foreground text-xs'>{shipment.priceLabel}</p>
-                      </TableCell>
-                      <TableCell>{shipment.sourceLabel}</TableCell>
-                      <TableCell>
-                        <p>{shipment.customerPrimary}</p>
-                        <p className='text-muted-foreground text-xs'>{shipment.customerSecondary}</p>
-                      </TableCell>
-                      <TableCell className='max-w-[240px] whitespace-normal'>
-                        <p className='line-clamp-2 text-sm'>{shipment.destinationLabel}</p>
-                      </TableCell>
-                      <TableCell>{shipment.trackingStatus}</TableCell>
-                      <TableCell>{shipment.trackingCode || 'Not available'}</TableCell>
-                      <TableCell>{shipment.itemsLabel}</TableCell>
-                      <TableCell>
+                      <TableCell className='whitespace-nowrap'>
                         {shipment.updatedAt
-                          ? new Date(shipment.updatedAt).toLocaleString('en-IN')
+                          ? new Date(shipment.updatedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
                           : 'Not available'}
                       </TableCell>
+                      <TableCell className='whitespace-nowrap font-medium'>{[shipment.title, shipment.priceLabel].filter(Boolean).join(' · ')}</TableCell>
+                      <TableCell className='whitespace-nowrap'>{shipment.sourceLabel}</TableCell>
+                      <TableCell className='whitespace-nowrap'>{[shipment.customerPrimary, shipment.customerSecondary].filter(Boolean).join(' · ')}</TableCell>
+                      <TableCell className='max-w-[240px] truncate whitespace-nowrap'>{shipment.destinationLabel}</TableCell>
+                      <TableCell>{shipment.trackingStatus}</TableCell>
+                      <TableCell>{shipment.trackingCode || 'Not available'}</TableCell>
+                      <TableCell className='whitespace-nowrap'>{shipment.itemsLabel}</TableCell>
                       <TableCell className='text-right'>
                         <div className='flex justify-end gap-2' onClick={(event) => event.stopPropagation()}>
                           <Button size='sm' onClick={() => setSelectedShipment(shipment)}>

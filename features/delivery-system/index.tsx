@@ -846,8 +846,7 @@ export function DeliverySystemDashboard() {
                   </span>
                   <span className='mt-4 text-sm font-semibold text-primary'>{service.badge}</span>
                   <span className='mt-1 text-base font-semibold'>{service.title}</span>
-                  <span className='mt-2 text-sm text-muted-foreground'>{service.bestFor}</span>
-                  <span className='mt-auto inline-flex items-center gap-2 pt-4 text-sm font-medium'>
+                  <span className='mt-auto inline-flex w-fit items-center gap-2 rounded-md border border-primary bg-white px-3 py-2 text-sm font-medium text-primary'>
                     Create order
                     <ArrowRight className='size-4' />
                   </span>

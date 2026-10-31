@@ -84,7 +84,7 @@ function ParcelCreateOrderPanel({
   onPlaced,
   onCreateWarehouse,
 }: {
-  service: { id: string; title: string; vehicleOptions: string[] }
+  service: { id: string; title: string; badge: string; vehicleOptions: string[] }
   existingOrder?: CourierOrderSummary | null
   onPlaced: () => void
   onCreateWarehouse: () => void
