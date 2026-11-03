@@ -650,11 +650,24 @@ export function LocalShadowfaxPanel({
         const serviceability = result?.serviceability || {}
         if (result?.drop?.latitude) setLatitude(String(result.drop.latitude))
         if (result?.drop?.longitude) setLongitude(String(result.drop.longitude))
+        const baseDeliveryCost = Number(serviceability.delivery_cost || 0)
+        let deliveryCost = baseDeliveryCost
+        try {
+          const applied = await api.post("/delivery-pricing/apply", {
+            partner_id: "shadowfax",
+            service_id: "local",
+            actual_price: baseDeliveryCost,
+          })
+          const adjusted = Number(applied?.data?.data?.price)
+          if (Number.isFinite(adjusted)) deliveryCost = adjusted
+        } catch {
+          deliveryCost = baseDeliveryCost
+        }
         setCheckResult({
           product,
           serviceable: Boolean(serviceability.serviceable),
           reason: readText(serviceability.reason),
-          deliveryCost: Number(serviceability.delivery_cost || 0) || undefined,
+          deliveryCost: deliveryCost || undefined,
           pickupEta: serviceability.pickup_eta,
           dropEta: serviceability.drop_eta,
           uniqueCode: "",
@@ -792,7 +805,7 @@ export function LocalShadowfaxPanel({
         order_model: product,
         external_id: externalId,
         tracking_url: trackUrl,
-        estimated_price: Number(summary.delivery_cost || checkResult.deliveryCost || 0),
+        estimated_price: Number(checkResult.deliveryCost || summary.delivery_cost || 0),
         duration_text: checkResult.dropEta ? `${checkResult.dropEta} min` : "",
         pickup: {
           name: warehouse.name,

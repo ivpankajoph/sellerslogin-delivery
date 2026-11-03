@@ -29,7 +29,6 @@ import {
   fetchDelhiveryB2cServiceability,
   fetchDelhiveryShippingEstimate,
   fetchShadowfaxServiceability,
-  previewDeliveryMarkup,
   type CourierWarehouse,
 } from "@/features/delivery-system/lib/api"
 import { type CourierOrderSummary } from "@/features/delivery-system/lib/data"
@@ -38,6 +37,15 @@ import { LocalShadowfaxPanel } from "@/features/delivery-system/components/local
 import api from "@/lib/axios"
 import { formatINR } from "@/lib/currency"
 
+type PorterOption = {
+  vehicle: string
+  price: number
+  slabKm: number
+  rangeLabel: string
+  capped: boolean
+  summary: string
+}
+
 type QuoteCard = {
   id: string
   title: string
@@ -45,7 +53,9 @@ type QuoteCard = {
   eta: string
   summary: string
   vehicle: string
-  partner?: "delhivery" | "shadowfax"
+  partner?: "delhivery" | "shadowfax" | "porter" | "platform"
+  selectable?: boolean
+  porterOptions?: PorterOption[]
 }
 
 const readText = (value: unknown) => String(value ?? "").trim()
@@ -211,22 +221,27 @@ function ParcelCreateOrderPanel({
       setDistanceText(estimateData?.distance_text || "")
       setDurationText(estimateData?.duration_text || "")
 
+      const applyAdjustment = async (partner: string, actual: number) => {
+        try {
+          const response = await api.post("/delivery-pricing/apply", {
+            partner_id: partner,
+            service_id: service.id,
+            actual_price: actual,
+          })
+          const price = Number(response?.data?.data?.price)
+          return Number.isFinite(price) ? price : actual
+        } catch {
+          return actual
+        }
+      }
+
       const next: QuoteCard[] = []
       const delhiveryCharge = Number(
         delhiveryEstimate.status === "fulfilled"
           ? delhiveryEstimate.value?.estimate?.estimated_charge || 0
           : 0,
       )
-      const delhiveryMarkup = delhiveryCharge
-        ? await previewDeliveryMarkup({
-            partner_id: "delhivery",
-            actual_price: delhiveryCharge,
-            order_id: existingOrder?.id,
-            order_number: existingOrder?.orderNumber,
-          }).catch(() => null)
-        : null
-      const delhiveryPrice = Number(delhiveryCharge || 0)
-      const delhiveryWallet = Number(delhiveryMarkup?.hiked_price || 0)
+      const delhiveryPrice = await applyAdjustment("delhivery", delhiveryCharge)
       const delhiveryServiceable =
         delhivery.status === "fulfilled" && Boolean(delhivery.value?.serviceability?.serviceable)
       next.push({
@@ -237,7 +252,9 @@ function ParcelCreateOrderPanel({
         vehicle: service.id === "d2c" ? "Parcel Surface" : service.vehicleOptions[0],
         partner: "delhivery",
         summary: delhiveryCharge
-          ? `Delhivery invoice API${delhiveryWallet && delhiveryWallet !== delhiveryPrice ? `. Wallet charge ${formatINR(delhiveryWallet)}` : ""}.`
+          ? delhiveryPrice !== delhiveryCharge
+            ? `Delhivery invoice ${formatINR(delhiveryCharge)}. Quoted ${formatINR(delhiveryPrice)} after pricing adjustment.`
+            : "Delhivery invoice charge for this weight and box size."
           : delhiveryServiceable
             ? "Pincode is serviceable, but Delhivery did not return a charge."
             : "Delhivery did not confirm this pincode.",
@@ -245,30 +262,161 @@ function ParcelCreateOrderPanel({
 
       const shadowfaxServiceable =
         shadowfax.status === "fulfilled" && Boolean(shadowfax.value?.serviceability?.serviceable)
+      let shadowfaxFailure = ""
+      const shadowfaxResponse = await api
+        .post("/delivery-pricing/shadowfax-quote", {
+          partner: "shadowfax",
+          city: form.city,
+          service_id: service.id,
+          distance_km: Number(estimateData?.distance_km || 0),
+          pickup: {
+            address_line_1: warehouseAddress(warehouse),
+            city: warehouse.city,
+            state: (warehouse as { state?: string }).state || form.state,
+            pincode: originPin,
+            formatted_address: [warehouseAddress(warehouse), warehouse.city, originPin, "India"].filter(Boolean).join(", "),
+          },
+          drop: {
+            address_line_1: form.address,
+            city: form.city,
+            state: form.state,
+            pincode: form.pincode,
+            formatted_address: [form.address, form.city, form.state, form.pincode, "India"].filter(Boolean).join(", "),
+          },
+        }, { timeout: 30000 })
+        .catch((error) => {
+          shadowfaxFailure = readText(error?.response?.data?.message || error?.message)
+          return error?.response || null
+        })
+      const shadowfaxQuote = shadowfaxResponse?.data?.data
+      const shadowfaxVehicles = Array.isArray(shadowfaxQuote?.vehicles) ? shadowfaxQuote.vehicles : []
+      const shadowfaxOptions: PorterOption[] = shadowfaxVehicles
+        .filter((vehicle: { available?: boolean; name?: string; added_on_zero?: boolean }) => vehicle.available && readText(vehicle.name) && !vehicle.added_on_zero)
+        .map((vehicle: {
+          name?: string
+          price?: number
+          sheet_price?: number
+          slab_km?: number
+          range_label?: string
+          capped?: boolean
+        }) => {
+          const price = Number(vehicle.price || 0)
+          const sheetPrice = Number(vehicle.sheet_price || price)
+          const slabKm = Number(vehicle.slab_km || 0)
+          const rangeLabel = readText(vehicle.range_label) || formatINR(price)
+          const capped = Boolean(vehicle.capped)
+          const summary = [
+            shadowfaxQuote?.used_default ? `No sheet fare for ${form.city}. Using Delhi NCR rates.` : "",
+            capped ? `Sheet maximum (${slabKm} km).` : `${readText(shadowfaxQuote?.matched_city) || form.city} Shadowfax rate.`,
+            `Fare range ${rangeLabel}.`,
+            price !== sheetPrice ? `Charged ${formatINR(price)} after adding the Set Pricing amount.` : `Charged ${formatINR(price)}.`,
+            "The delivery request still goes to Shadowfax.",
+          ].filter(Boolean).join(" ")
+          return { vehicle: readText(vehicle.name), price, slabKm, rangeLabel, capped, summary }
+        })
+        .sort((left: PorterOption, right: PorterOption) => left.price - right.price)
+      const addedOnZero = shadowfaxVehicles.find((vehicle: { added_on_zero?: boolean; price?: number }) => vehicle.added_on_zero)
+      const shadowfaxDefault = shadowfaxOptions[0]
+      const shadowfaxAddon = Number(addedOnZero?.price || 0)
       next.push({
         id: "shadowfax",
         title: "Shadowfax",
-        price: 0,
-        eta: "Not quoted",
-        vehicle: service.vehicleOptions[0],
+        price: shadowfaxDefault?.price || shadowfaxAddon,
+        eta: shadowfaxDefault
+          ? shadowfaxDefault.capped
+            ? `Sheet maximum (${shadowfaxDefault.slabKm} km)`
+            : `${shadowfaxDefault.slabKm} km slab`
+          : shadowfaxAddon
+            ? "Added on zero"
+            : "Not quoted",
+        vehicle: shadowfaxDefault?.vehicle || "",
         partner: "shadowfax",
-        summary: shadowfaxServiceable
-          ? "Pincode is serviceable. Shadowfax does not return a shipping price before the order is booked."
-          : "Shadowfax did not confirm this pincode.",
+        selectable: Boolean(shadowfaxDefault || shadowfaxAddon),
+        porterOptions: shadowfaxOptions,
+        summary: shadowfaxDefault?.summary
+          || (shadowfaxAddon
+            ? `Shadowfax did not return a price. ₹0 plus the Set Pricing amount is ${formatINR(shadowfaxAddon)}. The delivery request still goes to Shadowfax.`
+            : "")
+          || readText(shadowfaxQuote?.reason)
+          || shadowfaxFailure
+          || (shadowfaxServiceable
+            ? "Pincode is serviceable. Add a Shadowfax fare in Set Pricing, or add rupees on top of zero."
+            : "Shadowfax did not confirm this pincode."),
       })
 
-      const vehicles = Array.isArray(estimateData?.vehicles) ? estimateData.vehicles : []
-      vehicles.slice(0, 3).forEach((vehicle: { vehicle?: string; estimated_price?: number; eta?: string }) => {
-        const name = readText(vehicle.vehicle)
-        if (!name) return
-        next.push({
-          id: `vehicle:${name}`,
-          title: name,
-          price: Number(vehicle.estimated_price || 0),
-          eta: readText(vehicle.eta) || durationText || "Scheduled",
-          vehicle: name,
-          summary: `${service.title} vehicle option`,
+      let porterFailure = ""
+      const porterResponse = await api
+        .post("/delivery-pricing/porter-quote", {
+          city: form.city,
+          service_id: service.id,
+          distance_km: Number(estimateData?.distance_km || 0),
+          pickup: {
+            address_line_1: warehouseAddress(warehouse),
+            city: warehouse.city,
+            state: (warehouse as { state?: string }).state || form.state,
+            pincode: originPin,
+            formatted_address: [warehouseAddress(warehouse), warehouse.city, originPin, "India"].filter(Boolean).join(", "),
+          },
+          drop: {
+            address_line_1: form.address,
+            city: form.city,
+            state: form.state,
+            pincode: form.pincode,
+            formatted_address: [form.address, form.city, form.state, form.pincode, "India"].filter(Boolean).join(", "),
+          },
+        }, { timeout: 30000 })
+        .catch((error) => {
+          porterFailure = readText(error?.response?.data?.message || error?.message)
+          return error?.response || null
         })
+      const porterQuote = porterResponse?.data?.data
+      const porterVehicles = Array.isArray(porterQuote?.vehicles) ? porterQuote.vehicles : []
+      const porterOptions: PorterOption[] = porterVehicles
+        .filter((vehicle: { available?: boolean; name?: string }) => vehicle.available && readText(vehicle.name))
+        .map((vehicle: {
+          name?: string
+          price?: number
+          sheet_price?: number
+          slab_km?: number
+          range_label?: string
+          capped?: boolean
+        }) => {
+          const price = Number(vehicle.price || 0)
+          const sheetPrice = Number(vehicle.sheet_price || price)
+          const slabKm = Number(vehicle.slab_km || 0)
+          const rangeLabel = readText(vehicle.range_label) || formatINR(price)
+          const capped = Boolean(vehicle.capped)
+          const summary = [
+            porterQuote?.used_default ? `No sheet fare for ${form.city}. Using Delhi NCR rates.` : "",
+            capped ? `Sheet maximum (${slabKm} km).` : `${readText(porterQuote?.matched_city) || form.city} Porter rate.`,
+            `Fare range ${rangeLabel}.`,
+            price !== sheetPrice ? `Charged ${formatINR(price)} after pricing adjustment.` : `Charged ${formatINR(price)}.`,
+          ].filter(Boolean).join(" ")
+          return {
+            vehicle: readText(vehicle.name),
+            price,
+            slabKm,
+            rangeLabel,
+            capped,
+            summary,
+          }
+        })
+        .sort((left: PorterOption, right: PorterOption) => left.price - right.price)
+      const porterDefault = porterOptions[0]
+      next.push({
+        id: "porter",
+        title: "Porter",
+        price: porterDefault?.price || 0,
+        eta: porterDefault
+          ? porterDefault.capped
+            ? `Sheet maximum (${porterDefault.slabKm} km)`
+            : `${porterDefault.slabKm} km slab`
+          : "Not quoted",
+        vehicle: porterDefault?.vehicle || "",
+        partner: "porter",
+        selectable: Boolean(porterDefault),
+        porterOptions,
+        summary: porterDefault?.summary || readText(porterQuote?.reason) || porterFailure || "Porter pricing is unavailable for this request.",
       })
 
       setQuotes(next)
@@ -280,8 +428,30 @@ function ParcelCreateOrderPanel({
     }
   }
 
+  const selectPorterVehicle = (quoteId: string, vehicleName: string) => {
+    setQuotes((current) =>
+      current.map((quote) => {
+        if (quote.id !== quoteId) return quote
+        const option = quote.porterOptions?.find((entry) => entry.vehicle === vehicleName)
+        if (!option) return quote
+        return {
+          ...quote,
+          vehicle: option.vehicle,
+          price: option.price,
+          eta: option.capped ? `Sheet maximum (${option.slabKm} km)` : `${option.slabKm} km slab`,
+          summary: option.summary,
+        }
+      }),
+    )
+    setSelectedQuoteId(quoteId)
+  }
+
   const placeRequest = async () => {
     if (!warehouse || !selectedQuote) return
+    if (selectedQuote.selectable === false || (selectedQuote.partner === "porter" && !selectedQuote.price)) {
+      toast.error(selectedQuote.summary || "This delivery option cannot be requested.")
+      return
+    }
     setPlacing(true)
     try {
       let order = existingOrder || null
@@ -533,17 +703,49 @@ function ParcelCreateOrderPanel({
               />
               <div className="grid gap-3 md:grid-cols-2">
                 {quotes.map((quote) => (
-                  <button
+                  <div
                     key={quote.id}
-                    type="button"
-                    onClick={() => setSelectedQuoteId(quote.id)}
-                    className={`rounded-xl border p-4 text-left ${selectedQuoteId === quote.id ? "border-primary bg-primary/5" : "bg-card"}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      if (quote.selectable !== false) setSelectedQuoteId(quote.id)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && quote.selectable !== false) setSelectedQuoteId(quote.id)
+                    }}
+                    className={`rounded-xl border p-4 text-left ${quote.selectable === false ? "cursor-not-allowed opacity-80" : "cursor-pointer"} ${selectedQuoteId === quote.id ? "border-primary bg-primary/5" : "bg-card"}`}
                   >
                     <p className="font-semibold">{quote.title}</p>
+                    {(quote.partner === "porter" || quote.partner === "shadowfax") && quote.vehicle ? (
+                      <p className="text-sm text-muted-foreground">{quote.vehicle}</p>
+                    ) : null}
                     <p className="mt-1 text-2xl font-semibold">{quote.price ? formatINR(quote.price) : "Price unavailable"}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">ETA {quote.eta}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{quote.summary}</p>
-                  </button>
+                    {quote.eta === "Surface" || quote.eta === "Express" ? (
+                      <p className="mt-1 text-sm text-muted-foreground">ETA {quote.eta}</p>
+                    ) : null}
+                    {quote.porterOptions?.length ? (
+                      <div className="mt-3 space-y-2">
+                        {quote.porterOptions.map((option) => (
+                          <label
+                            key={option.vehicle}
+                            className="flex cursor-pointer items-center justify-between gap-3 rounded-md border bg-background px-3 py-2 text-sm"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <span className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name={`${quote.id}-vehicle`}
+                                checked={quote.vehicle === option.vehicle}
+                                onChange={() => selectPorterVehicle(quote.id, option.vehicle)}
+                              />
+                              {option.vehicle}
+                            </span>
+                            <span className="text-muted-foreground">{option.rangeLabel}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 ))}
               </div>
               <Button onClick={() => void placeRequest()} disabled={placing || !selectedQuote}>

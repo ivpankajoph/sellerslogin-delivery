@@ -12,6 +12,7 @@ import {
   RefreshCcw,
   FileText,
   ReceiptText,
+  IndianRupee,
   ChevronDown,
   Truck,
   Warehouse,
@@ -70,12 +71,14 @@ import { ManualOrdersPanel } from './components/manual-orders-panel'
 import { WebsiteOrdersPanel } from './components/website-orders-panel'
 import { CourierListPage } from '@/features/courier/list'
 import { DeliveryMarkupPanel } from './delivery-markup-panel'
+import { SetPricingPanel } from './set-pricing-panel'
 import { DeliverySupportPanel } from './delivery-support-panel'
 
 type DeliveryView =
   | 'dashboard'
   | 'support'
   | 'delivery-markup'
+  | 'set-pricing'
   | 'service-orders'
   | 'website-requests'
   | 'website-orders'
@@ -94,6 +97,7 @@ type DeliveryWorkspaceSection =
   | 'warehouses'
   | 'tracking'
   | 'delivery-markup'
+  | 'set-pricing'
   | 'support'
   | 'book-vehicle'
   | 'service-orders'
@@ -623,6 +627,20 @@ export function DeliveryWorkspaceShell({
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
+                {isAdmin ? (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={activeSection === 'set-pricing'}
+                      onClick={() => openPath('/delivery-system?view=set-pricing')}
+                      tooltip='Set Pricing'
+                      className='h-10 cursor-pointer text-sm hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+                    >
+                      <IndianRupee />
+                      <span>Set Pricing</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ) : null}
+
                 {role === 'superadmin' && (
                   <SidebarMenuItem>
                     <SidebarMenuButton
@@ -688,6 +706,7 @@ export function DeliverySystemDashboard() {
   const user = useSelector((state: RootState) => state.auth?.user)
   const token = useSelector((state: RootState) => state.auth?.token)
   const isVendor = role === 'vendor'
+  const isAdmin = role === 'admin' || role === 'superadmin'
   const isSuperAdmin = role === 'superadmin'
   const [activeView, setActiveView] = useState<DeliveryView>('dashboard')
   const [orders, setOrders] = useState<CourierOrderSummary[]>([])
@@ -767,6 +786,8 @@ export function DeliverySystemDashboard() {
         ? 'support'
         : view === 'delivery-markup'
           ? 'delivery-markup'
+          : view === 'set-pricing'
+            ? 'set-pricing'
           : view === 'service-orders'
             ? 'service-orders'
             : view === 'website-requests'
@@ -807,6 +828,8 @@ export function DeliverySystemDashboard() {
             ? 'support'
             : activeView === 'delivery-markup'
               ? 'delivery-markup'
+              : activeView === 'set-pricing'
+                ? 'set-pricing'
               : activeView === 'service-orders' || activeView === 'website-requests'
                 ? activeView === 'website-requests'
                   ? 'courier-list'
@@ -912,6 +935,15 @@ export function DeliverySystemDashboard() {
         />
       ) : activeView === 'delivery-markup' ? (
         <DeliveryMarkupPanel />
+      ) : activeView === 'set-pricing' ? (
+        isAdmin ? <SetPricingPanel /> : (
+          <Card>
+            <CardHeader>
+              <CardTitle>Set Pricing</CardTitle>
+              <CardDescription>This page is available to admin accounts only.</CardDescription>
+            </CardHeader>
+          </Card>
+        )
       ) : activeView === 'service-orders' ? (
         <ServiceOrdersPanel />
       ) : activeView === 'website-requests' ? (
