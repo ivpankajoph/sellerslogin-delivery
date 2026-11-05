@@ -63,14 +63,11 @@ type QuoteCard = {
 
 const readText = (value: unknown) => String(value ?? "").trim()
 
-const warehousePin = (warehouse: CourierWarehouse | null) =>
-  readText(warehouse?.pin || (warehouse as { pincode?: string } | null)?.pincode)
+const warehousePin = (warehouse: { pin?: string; pincode?: string } | null) =>
+  readText(warehouse?.pin || warehouse?.pincode)
 
-const warehouseAddress = (warehouse: CourierWarehouse | null) =>
-  readText(
-    warehouse?.address ||
-      (warehouse as { address_line_1?: string } | null)?.address_line_1,
-  )
+const warehouseAddress = (warehouse: { address?: string; address_line_1?: string } | null) =>
+  readText(warehouse?.address || warehouse?.address_line_1)
 
 const emptyForm = {
   name: "",
@@ -173,7 +170,7 @@ function ParcelCreateOrderPanel({
     [warehouseId, warehouses],
   )
   const isLocalDelivery = service.id === "local"
-  const pickupSource = warehouse || (isLocalDelivery ? ({
+  const pickupSource = warehouse || (isLocalDelivery ? {
     id: "local-pickup",
     name: form.name || "Pickup",
     phone: form.phone,
@@ -181,8 +178,8 @@ function ParcelCreateOrderPanel({
     city: form.city,
     state: form.state,
     pin: form.pincode,
-    provider: "manual",
-  } as CourierWarehouse) : null)
+    provider: "manual" as const,
+  } : null)
   const originPin = warehousePin(pickupSource) || (isLocalDelivery ? form.pincode : "")
   const selectedQuote = quotes.find((quote) => quote.id === selectedQuoteId) || null
 
