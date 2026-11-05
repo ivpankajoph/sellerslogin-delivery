@@ -1112,40 +1112,43 @@ export function LocalShadowfaxPanel({
     try {
       let order = existingOrder || savedOrder || null
       if (!order) {
-        const created = await createManualCourierOrder({
-          customer: {
-            name,
-            phone,
-            address_line_1: address,
-            address_line_2: options.address_line_2,
-            city,
-            state,
-            pincode,
-            country: "India",
-          },
-          item: {
-            name: items[0]?.name || "Item",
-            quantity: Number(items[0]?.quantity || 1),
-            unit_price: Number(items[0]?.price || amount || 0),
-            sku: items[0]?.sku_id || items[0]?.id,
-            hsn_code: items[0]?.hsn_code,
-            category: items[0]?.category,
-          },
-          shipment: {
-            payment_mode: paid === "false" ? "cod" : "prepaid",
-            total_amount: Number(options.total_amount || amount || 0),
-          },
-        })
-        order = created.order
-        if (order) setSavedOrder(order)
+        try {
+          const created = await createManualCourierOrder({
+            customer: {
+              name,
+              phone,
+              address_line_1: address,
+              address_line_2: addressLine2 || options.address_line_2,
+              city,
+              state,
+              pincode,
+              country: "India",
+            },
+            item: {
+              name: items[0]?.name || "Item",
+              quantity: Number(items[0]?.quantity || 1),
+              unit_price: Number(items[0]?.price || amount || 0),
+              sku: items[0]?.sku_id || items[0]?.id,
+              hsn_code: items[0]?.hsn_code,
+              category: items[0]?.category,
+            },
+            shipment: {
+              payment_mode: paid === "false" ? "cod" : "prepaid",
+              total_amount: Number(options.total_amount || amount || 0),
+            },
+          })
+          order = created.order
+          if (order) setSavedOrder(order)
+        } catch {
+          order = null
+        }
       }
-      if (!order?.id) throw new Error("Order could not be created")
 
       let externalId = ""
       let trackUrl = ""
       if (selectedChoice.partner === "shadowfax" && warehouse) {
         try {
-          const body = { ...buildBodies(), order_id: order.id }
+          const body = { ...buildBodies(), order_id: order?.id }
           const placed = product === "hyperlocal" ? await placeHyperlocalOrder(body) : await placeQuickCommerceOrder(body)
           const summary = placed?.summary || {}
           externalId = readText(summary.sfx_order_id || summary.awb_number || summary.external_id)
@@ -1166,7 +1169,7 @@ export function LocalShadowfaxPanel({
         estimated_price: selectedChoice.price,
         duration_text: routeInfo.durationText,
         distance_km: routeInfo.distanceKm,
-        source_order_id: order.id,
+        source_order_id: order?.id || "",
         pickup: {
           name: pickupForm.name,
           phone: pickupForm.phone,
@@ -1194,7 +1197,7 @@ export function LocalShadowfaxPanel({
       if (!booking?.data?.success) throw new Error(booking?.data?.message || "Delivery request was not saved")
 
       const partnerName = selectedChoice.partner === "porter" ? "Porter" : selectedChoice.partner === "delhivery" ? "Delhivery" : "Shadowfax"
-      toast.success(`${partnerName} ${selectedChoice.name} request placed${externalId ? `. Id ${externalId}` : ""}`)
+      toast.success(`${partnerName} ${selectedChoice.name} request saved. It is in All Requests for you and the admin.`)
       setPriceOpen(false)
       onPlaced()
     } catch (error) {
