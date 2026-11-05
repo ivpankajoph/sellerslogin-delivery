@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import api from '@/lib/axios'
+import { PartnerLogo } from '@/components/shared/partner-logo'
 import type { RootState } from '@/store'
 
 type Slab = {
@@ -63,10 +64,10 @@ const partnerLabels: Record<Adjustment['partner_id'], string> = {
 }
 
 const serviceLabels: Record<Adjustment['service_id'], string> = {
-  'heavy-duty': 'Heavy, over 750 kg',
-  b2b: 'Light, under 750 kg',
-  d2c: 'Parcel, under 20 kg',
-  local: 'Hyperlocal, under 20 kg',
+  'heavy-duty': 'B2B',
+  b2b: 'B2C',
+  d2c: 'All-India Courier',
+  local: 'Quick Commerce / Hyperlocal',
 }
 
 const emptyAdjustments = (): Adjustment[] =>
@@ -275,7 +276,7 @@ export function SetPricingPanel() {
                     <TableRow key={`${partnerId}-${serviceId}`}>
                       {index === 0 ? (
                         <TableCell rowSpan={services.length} className='align-top font-semibold'>
-                          {partnerLabels[partnerId]}
+                          <PartnerLogo partner={partnerId} name={partnerLabels[partnerId]} size="sm" />
                         </TableCell>
                       ) : null}
                       <TableCell>{serviceLabels[serviceId]}</TableCell>
@@ -341,7 +342,7 @@ export function SetPricingPanel() {
             <div>
               <CardTitle>Fare sheet</CardTitle>
               <CardDescription>
-                Choose Porter or Shadowfax. Each has its own city rates. A city that is not listed uses Delhi NCR.
+                Check price uses the Max fare of the slab that covers the distance. A 16 km trip uses the 25 km row. Use Save fare sheet to store these cells.
               </CardDescription>
             </div>
             <div className='flex rounded-md border p-1'>
@@ -349,17 +350,24 @@ export function SetPricingPanel() {
                 type='button'
                 variant={sheetPartner === 'porter' ? 'default' : 'ghost'}
                 onClick={() => setSheetPartner('porter')}
+                className='gap-2'
               >
+                <PartnerLogo partner="porter" size="xs" showName={false} />
                 Porter
               </Button>
               <Button
                 type='button'
                 variant={sheetPartner === 'shadowfax' ? 'default' : 'ghost'}
                 onClick={() => setSheetPartner('shadowfax')}
+                className='gap-2'
               >
+                <PartnerLogo partner="shadowfax" size="xs" showName={false} />
                 Shadowfax
               </Button>
             </div>
+            <Button onClick={() => void saveSheet()} disabled={savingSheet || loading || !cities.length}>
+              {savingSheet ? 'Saving...' : 'Save fare sheet'}
+            </Button>
           </div>
         </CardHeader>
         <CardContent className='space-y-4'>
@@ -502,18 +510,23 @@ export function SetPricingPanel() {
                 type='button'
                 variant={sheetPartner === 'porter' ? 'default' : 'ghost'}
                 onClick={() => setSheetPartner('porter')}
+                className='gap-2'
               >
+                <PartnerLogo partner="porter" size="xs" showName={false} />
                 Porter
               </Button>
               <Button
                 type='button'
                 variant={sheetPartner === 'shadowfax' ? 'default' : 'ghost'}
                 onClick={() => setSheetPartner('shadowfax')}
+                className='gap-2'
               >
+                <PartnerLogo partner="shadowfax" size="xs" showName={false} />
                 Shadowfax
               </Button>
             </div>
-            <Button onClick={() => void saveSheet()} disabled={savingSheet || loading || !cities.length}>
+            <Button onClick={() => void saveSheet()} disabled={savingSheet || loading || !cities.length} className='gap-2'>
+              <PartnerLogo partner={sheetPartner} size="xs" showName={false} />
               {savingSheet ? 'Saving...' : `Save ${sheetPartner === 'shadowfax' ? 'Shadowfax' : 'Porter'} sheet`}
             </Button>
           </div>

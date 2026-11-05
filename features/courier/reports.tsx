@@ -15,6 +15,7 @@ import {
   type CourierOrderSummary,
 } from '@/features/delivery-system/lib/data'
 import { formatINR } from '@/lib/currency'
+import { PartnerLogo } from '@/components/shared/partner-logo'
 
 const readText = (value: unknown) => String(value ?? '').trim()
 
@@ -146,7 +147,7 @@ export function CourierReportsPage() {
                 <div className='mt-4 space-y-3'>
                   {Object.entries(report.partnerCounts).map(([partner, count]) => (
                     <div key={partner} className='flex items-center justify-between rounded-md border border-border bg-muted/20 px-4 py-3 text-sm'>
-                      <span className='font-medium text-foreground'>{partner}</span>
+                      <PartnerLogo partner={partner} size="sm" />
                       <span className='font-semibold text-muted-foreground'>{count} orders</span>
                     </div>
                   ))}

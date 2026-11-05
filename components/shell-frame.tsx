@@ -59,7 +59,7 @@ export function ShellFrame({
   const user = useSelector((state: RootState) => state.auth.user);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [vendorLabel, setVendorLabel] = React.useState("");
-  const [sidebarWidth, setSidebarWidth] = React.useState(256);
+  const [sidebarWidth, setSidebarWidth] = React.useState(320);
   const [resizingSidebar, setResizingSidebar] = React.useState(false);
   const sidebarStorageReady = React.useRef(false);
 
@@ -67,7 +67,7 @@ export function ShellFrame({
     if (!sidebarStorageReady.current) {
       sidebarStorageReady.current = true;
       const savedWidth = Number(window.localStorage.getItem("sld-sidebar-width"));
-      if (savedWidth >= 220 && savedWidth <= 400) setSidebarWidth(savedWidth);
+      if (savedWidth >= 300 && savedWidth <= 480) setSidebarWidth(savedWidth);
       return;
     }
     window.localStorage.setItem("sld-sidebar-width", String(sidebarWidth));
@@ -75,7 +75,7 @@ export function ShellFrame({
 
   React.useEffect(() => {
     if (!resizingSidebar) return;
-    const resize = (event: MouseEvent) => setSidebarWidth(Math.min(400, Math.max(220, event.clientX)));
+    const resize = (event: MouseEvent) => setSidebarWidth(Math.min(480, Math.max(300, event.clientX)));
     const stop = () => setResizingSidebar(false);
     window.addEventListener("mousemove", resize);
     window.addEventListener("mouseup", stop);
@@ -129,15 +129,15 @@ export function ShellFrame({
         <aside className={`sld-shell-aside fixed top-0 bottom-0 left-0 z-50 border-r border-border bg-card flex flex-col transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
           <div className="h-16 flex items-center justify-between px-5 border-b border-border">
             <a href="/delivery-system" className="flex items-center gap-2.5">
-              <Image src="/logo-mark-v5.svg" alt="SellersLogin Delivery" width={36} height={36} priority className="size-9 shrink-0" />
+              <Image src="/logo-mark-v6.svg" alt="SellersLogin Delivery" width={36} height={36} priority className="size-9 shrink-0" />
               <div className="flex flex-col">
                 <span className="font-bold text-sm tracking-tight leading-none">SellersLogin</span>
                 <span className="text-[11px] font-medium text-primary">Delivery</span>
               </div>
             </a>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="sm" className="hidden size-8 p-0 lg:inline-flex" onClick={() => setSidebarWidth((width) => (width <= 220 ? 320 : 220))}>
-                {sidebarWidth <= 220 ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
+              <Button variant="ghost" size="sm" className="hidden size-8 p-0 lg:inline-flex" onClick={() => setSidebarWidth((width) => (width <= 300 ? 360 : 300))}>
+                {sidebarWidth <= 300 ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
               </Button>
               <Button variant="ghost" size="sm" className="lg:hidden size-8 p-0" onClick={() => setSidebarOpen(false)}>
                 <X className="size-4" />
@@ -188,7 +188,7 @@ export function ShellFrame({
                     </Avatar>
                     <div className="hidden sm:flex flex-col text-left">
                       <span className="text-xs font-semibold leading-none">{name}</span>
-                      <span className="text-[10px] text-muted-foreground mt-0.5 capitalize">{role}</span>
+                     
                     </div>
                   </Button>
                 </DropdownMenuTrigger>

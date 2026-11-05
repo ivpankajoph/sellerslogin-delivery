@@ -38,6 +38,7 @@ import {
   type CourierWarehouse,
 } from '@/features/delivery-system/lib/api'
 import { IndianStateSelect } from '@/features/delivery-system/components/indian-state-select'
+import { PartnerLogo } from '@/components/shared/partner-logo'
 import type { RootState } from '@/store'
 
 type WarehouseForm = {
@@ -113,7 +114,7 @@ const toggleDay = (days: string[], day: string) =>
 
 const greenButtonClass = 'bg-primary text-white hover:bg-primary/90'
 const greenOutlineButtonClass =
-  'border-primary text-foreground hover:bg-muted hover:text-emerald-800'
+  'border-primary text-foreground hover:bg-muted hover:text-primary'
 const activeDayClass = 'border-primary bg-primary text-white hover:bg-primary/90'
 const inactiveDayClass = 'border-border bg-background text-foreground hover:bg-muted'
 
@@ -366,8 +367,8 @@ export function CourierWarehouseManagePage() {
                     <TableCell className='whitespace-nowrap'>{warehouse.updatedAt ? new Date(warehouse.updatedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'N/A'}</TableCell>
                     <TableCell className='whitespace-nowrap font-medium'>{warehouse.name}</TableCell>
                     <TableCell>
-                      <Badge variant='outline'>
-                        {warehouse.provider === 'shadowfax' ? 'Shadowfax' : 'Delhivery'}
+                      <Badge variant='outline' className='gap-1 py-1'>
+                        <PartnerLogo partner={warehouse.provider} size="xs" />
                       </Badge>
                     </TableCell>
                     <TableCell>{warehouse.phone || 'N/A'}</TableCell>
@@ -464,19 +465,17 @@ export function CourierWarehouseManagePage() {
             <div className='grid gap-3 sm:grid-cols-2'>
               <button
                 type='button'
-                className='rounded-md border border-sky-200 bg-sky-50 p-5 text-left hover:bg-sky-100'
+                className='flex items-center gap-3 rounded-md border border-sky-200 bg-sky-50 p-5 text-left hover:bg-sky-100 transition'
                 onClick={() => setCreateProvider('delhivery')}
               >
-                <p className='text-lg font-semibold text-sky-900'>Delhivery</p>
-               
+                <PartnerLogo partner="delhivery" size="lg" textClassName="text-lg font-semibold text-sky-900" />
               </button>
               <button
                 type='button'
-                className='rounded-md border border-orange-200 bg-orange-50 p-5 text-left hover:bg-orange-100'
+                className='flex items-center gap-3 rounded-md border border-orange-200 bg-orange-50 p-5 text-left hover:bg-orange-100 transition'
                 onClick={() => setCreateProvider('shadowfax')}
               >
-                <p className='text-lg font-semibold text-orange-900'>Shadowfax</p>
-                
+                <PartnerLogo partner="shadowfax" size="lg" textClassName="text-lg font-semibold text-orange-900" />
               </button>
             </div>
           ) : createProvider === 'delhivery' ? (
@@ -567,8 +566,10 @@ export function CourierWarehouseManagePage() {
         <DialogContent className='w-[min(96vw,760px)] max-h-[90vh] overflow-y-auto rounded-md'>
           <DialogHeader className='text-left'>
             <DialogTitle>Edit Warehouse</DialogTitle>
-            <DialogDescription>
-              {selected?.name || 'Warehouse'} | {selected?.provider === 'shadowfax' ? 'Shadowfax' : 'Delhivery'}
+            <DialogDescription className='flex items-center gap-1.5'>
+              <span>{selected?.name || 'Warehouse'}</span>
+              <span>·</span>
+              <PartnerLogo partner={selected?.provider} size="xs" />
             </DialogDescription>
           </DialogHeader>
           {selected?.provider === 'shadowfax' ? (

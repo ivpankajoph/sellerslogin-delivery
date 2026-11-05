@@ -41,6 +41,7 @@ import {
   type CourierOrderSummary,
 } from '@/features/delivery-system/lib/data'
 import { formatINR } from '@/lib/currency'
+import { PartnerLogo } from '@/components/shared/partner-logo'
 import type { RootState } from '@/store'
 
 type OrderShipmentRow = {
@@ -640,7 +641,12 @@ export function CourierListPage() {
                           : 'Not available'}
                       </TableCell>
                       <TableCell className='whitespace-nowrap font-medium'>{[shipment.title, shipment.priceLabel].filter(Boolean).join(' · ')}</TableCell>
-                      <TableCell className='whitespace-nowrap'>{shipment.sourceLabel}</TableCell>
+                      <TableCell className='whitespace-nowrap'>
+                        <div className='flex items-center gap-1.5'>
+                          <PartnerLogo partner={shipment.partner.id} size="xs" showName={false} />
+                          <span>{shipment.sourceLabel}</span>
+                        </div>
+                      </TableCell>
                       <TableCell className='whitespace-nowrap'>{[shipment.customerPrimary, shipment.customerSecondary].filter(Boolean).join(' · ')}</TableCell>
                       <TableCell className='max-w-[240px] truncate whitespace-nowrap'>{shipment.destinationLabel}</TableCell>
                       <TableCell>{shipment.trackingStatus}</TableCell>
@@ -713,7 +719,7 @@ export function CourierListPage() {
                         {formatINR(selectedShipment.order.total)}
                       </DialogDescription>
                     </div>
-                    <Badge variant='outline'>{selectedShipment.partner.title}</Badge>
+                    <PartnerLogo partner={selectedShipment.partner.id} name={selectedShipment.partner.title} size="sm" badge />
                   </div>
                 </DialogHeader>
 
@@ -874,7 +880,7 @@ export function CourierListPage() {
                         Imported from Delhivery panel | {selectedShipment.externalShipment.order_id || 'No ref_ids'}
                       </DialogDescription>
                     </div>
-                    <Badge variant='outline'>{selectedShipment.partner.title}</Badge>
+                    <PartnerLogo partner={selectedShipment.partner.id} name={selectedShipment.partner.title} size="sm" badge />
                   </div>
                 </DialogHeader>
 

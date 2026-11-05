@@ -36,6 +36,9 @@ import { IndianStateSelect } from "@/features/delivery-system/components/indian-
 import { LocalShadowfaxPanel } from "@/features/delivery-system/components/local-shadowfax-panel"
 import api from "@/lib/axios"
 import { formatINR } from "@/lib/currency"
+import { useDeliveryAppConfig } from "@/features/delivery-system/lib/delivery-apps"
+import { VehicleLogo } from "@/components/shared/vehicle-logo"
+import { PartnerLogo } from "@/components/shared/partner-logo"
 
 type PorterOption = {
   vehicle: string
@@ -94,7 +97,15 @@ function ParcelCreateOrderPanel({
   onPlaced,
   onCreateWarehouse,
 }: {
-  service: { id: string; title: string; badge: string; vehicleOptions: string[] }
+  service: {
+    id: string
+    title: string
+    badge: string
+    vehicleOptions: string[]
+    key?: string
+    product?: "hyperlocal" | "quick_commerce"
+    partners?: string[]
+  }
   existingOrder?: CourierOrderSummary | null
   onPlaced: () => void
   onCreateWarehouse: () => void
@@ -109,6 +120,12 @@ function ParcelCreateOrderPanel({
   const [durationText, setDurationText] = useState("")
   const [quotes, setQuotes] = useState<QuoteCard[]>([])
   const [selectedQuoteId, setSelectedQuoteId] = useState("")
+  const { vehicles: allowedVehicleMap } = useDeliveryAppConfig()
+  const allowedVehiclesFor = (partner: string) => {
+    const serviceKey = service.key || service.id
+    const list = allowedVehicleMap?.[serviceKey]?.[partner]
+    return Array.isArray(list) ? list : undefined
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -155,13 +172,25 @@ function ParcelCreateOrderPanel({
     () => warehouses.find((entry) => entry.id === warehouseId) || warehouses[0] || null,
     [warehouseId, warehouses],
   )
-  const originPin = warehousePin(warehouse)
+  const isLocalDelivery = service.id === "local"
+  const pickupSource = warehouse || (isLocalDelivery ? ({
+    id: "local-pickup",
+    name: form.name || "Pickup",
+    phone: form.phone,
+    address: form.address,
+    city: form.city,
+    state: form.state,
+    pin: form.pincode,
+    provider: "manual",
+  } as CourierWarehouse) : null)
+  const originPin = warehousePin(pickupSource) || (isLocalDelivery ? form.pincode : "")
   const selectedQuote = quotes.find((quote) => quote.id === selectedQuoteId) || null
 
   const setField = (key: keyof typeof emptyForm, value: string) =>
     setForm((current) => ({ ...current, [key]: value }))
 
   const checkPrice = async () => {
+    const warehouse = pickupSource
     if (!warehouse) return
     if (!form.pincode || !form.city || !form.state || !form.address || !form.name || !form.phone || !form.itemName) {
       toast.error("Fill the customer, address, and item before checking the price.")
@@ -244,13 +273,22 @@ function ParcelCreateOrderPanel({
       const delhiveryPrice = await applyAdjustment("delhivery", delhiveryCharge)
       const delhiveryServiceable =
         delhivery.status === "fulfilled" && Boolean(delhivery.value?.serviceability?.serviceable)
+      const delhiveryVehicles = (allowedVehiclesFor("delhivery") || []).map((name) => ({
+        vehicle: name,
+        price: delhiveryPrice,
+        slabKm: 0,
+        rangeLabel: formatINR(delhiveryPrice),
+        capped: false,
+        summary: "Delhivery courier charge for this weight and box size.",
+      }))
       next.push({
         id: "delhivery",
         title: "Delhivery",
         price: delhiveryPrice,
         eta: form.mode === "E" ? "Express" : "Surface",
-        vehicle: service.id === "d2c" ? "Parcel Surface" : service.vehicleOptions[0],
+        vehicle: delhiveryVehicles[0]?.vehicle || (service.id === "d2c" ? "Parcel Surface" : service.vehicleOptions[0]),
         partner: "delhivery",
+        porterOptions: delhiveryVehicles,
         summary: delhiveryCharge
           ? delhiveryPrice !== delhiveryCharge
             ? `Delhivery invoice ${formatINR(delhiveryCharge)}. Quoted ${formatINR(delhiveryPrice)} after pricing adjustment.`
@@ -268,6 +306,7 @@ function ParcelCreateOrderPanel({
           partner: "shadowfax",
           city: form.city,
           service_id: service.id,
+          allowed_vehicles: allowedVehiclesFor("shadowfax"),
           distance_km: Number(estimateData?.distance_km || 0),
           pickup: {
             address_line_1: warehouseAddress(warehouse),
@@ -314,6 +353,10 @@ function ParcelCreateOrderPanel({
           ].filter(Boolean).join(" ")
           return { vehicle: readText(vehicle.name), price, slabKm, rangeLabel, capped, summary }
         })
+        .filter((option: PorterOption) => {
+          const allowed = allowedVehiclesFor("shadowfax")
+          return !allowed || allowed.some((name) => name.toLowerCase() === option.vehicle.toLowerCase())
+        })
         .sort((left: PorterOption, right: PorterOption) => left.price - right.price)
       const addedOnZero = shadowfaxVehicles.find((vehicle: { added_on_zero?: boolean; price?: number }) => vehicle.added_on_zero)
       const shadowfaxDefault = shadowfaxOptions[0]
@@ -349,6 +392,7 @@ function ParcelCreateOrderPanel({
         .post("/delivery-pricing/porter-quote", {
           city: form.city,
           service_id: service.id,
+          allowed_vehicles: allowedVehiclesFor("porter"),
           distance_km: Number(estimateData?.distance_km || 0),
           pickup: {
             address_line_1: warehouseAddress(warehouse),
@@ -401,6 +445,10 @@ function ParcelCreateOrderPanel({
             summary,
           }
         })
+        .filter((option: PorterOption) => {
+          const allowed = allowedVehiclesFor("porter")
+          return !allowed || allowed.some((name) => name.toLowerCase() === option.vehicle.toLowerCase())
+        })
         .sort((left: PorterOption, right: PorterOption) => left.price - right.price)
       const porterDefault = porterOptions[0]
       next.push({
@@ -419,8 +467,15 @@ function ParcelCreateOrderPanel({
         summary: porterDefault?.summary || readText(porterQuote?.reason) || porterFailure || "Porter pricing is unavailable for this request.",
       })
 
-      setQuotes(next)
-      setSelectedQuoteId(next[0]?.id || "")
+      const allowed = new Set(service.partners || [])
+      const visible = service.partners
+        ? next.filter((quote) => quote.partner && allowed.has(quote.partner))
+        : next
+      if (service.partners && !visible.length) {
+        toast.error("No delivery app is enabled for this delivery type.")
+      }
+      setQuotes(visible)
+      setSelectedQuoteId(visible.find((quote) => quote.selectable !== false)?.id || visible[0]?.id || "")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Price check failed")
     } finally {
@@ -447,6 +502,7 @@ function ParcelCreateOrderPanel({
   }
 
   const placeRequest = async () => {
+    const warehouse = pickupSource
     if (!warehouse || !selectedQuote) return
     if (selectedQuote.selectable === false || (selectedQuote.partner === "porter" && !selectedQuote.price)) {
       toast.error(selectedQuote.summary || "This delivery option cannot be requested.")
@@ -535,6 +591,7 @@ function ParcelCreateOrderPanel({
 
       const booking = await api.post("/delivery-bookings", {
         service_id: service.id,
+        order_model: service.product || "",
         vehicle: selectedQuote.vehicle,
         partner: selectedQuote.partner,
         estimated_price: selectedQuote.price,
@@ -580,7 +637,7 @@ function ParcelCreateOrderPanel({
 
   return (
     <>
-      <Dialog open={warehousesReady && warehouses.length === 0}>
+      <Dialog open={!isLocalDelivery && warehousesReady && warehouses.length === 0}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create a warehouse first</DialogTitle>
@@ -600,11 +657,15 @@ function ParcelCreateOrderPanel({
             <p className="text-sm font-semibold text-primary">{service.badge}</p>
             <CardTitle>{service.title}</CardTitle>
             <CardDescription>
-              {existingOrder ? `Request delivery for ${existingOrder.orderNumber}.` : "Create your order."} Pickup comes from your warehouse. Delhivery price is their invoice charge for the weight and box size below.
+              {isLocalDelivery
+                ? "Enter the customer details and check the price. A warehouse is not required for this delivery type."
+                : existingOrder
+                  ? `Request delivery for ${existingOrder.orderNumber}. Pickup comes from your warehouse.`
+                  : "Create your order. Pickup comes from your warehouse."}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2 md:col-span-2">
+            {isLocalDelivery ? null : <div className="space-y-2 md:col-span-2">
               <Label>Warehouse</Label>
               <Select value={warehouse?.id || ""} onValueChange={setWarehouseId}>
                 <SelectTrigger>
@@ -618,7 +679,7 @@ function ParcelCreateOrderPanel({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </div>}
             {([
               ["name", "Customer name"],
               ["phone", "Phone"],
@@ -680,7 +741,7 @@ function ParcelCreateOrderPanel({
               </Select>
             </div>
             <div className="md:col-span-2">
-              <Button onClick={() => void checkPrice()} disabled={checking || !warehouse}>
+              <Button onClick={() => void checkPrice()} disabled={checking || !pickupSource}>
                 {checking ? "Checking price..." : "Check price and route"}
               </Button>
             </div>
@@ -715,10 +776,10 @@ function ParcelCreateOrderPanel({
                     }}
                     className={`rounded-xl border p-4 text-left ${quote.selectable === false ? "cursor-not-allowed opacity-80" : "cursor-pointer"} ${selectedQuoteId === quote.id ? "border-primary bg-primary/5" : "bg-card"}`}
                   >
-                    <p className="font-semibold">{quote.title}</p>
-                    {(quote.partner === "porter" || quote.partner === "shadowfax") && quote.vehicle ? (
-                      <p className="text-sm text-muted-foreground">{quote.vehicle}</p>
-                    ) : null}
+                    <div className="flex items-center gap-2">
+                      <PartnerLogo partner={quote.partner || quote.id} size="sm" showName={false} />
+                      <p className="font-semibold">{quote.title}</p>
+                    </div>
                     <p className="mt-1 text-2xl font-semibold">{quote.price ? formatINR(quote.price) : "Price unavailable"}</p>
                     {quote.eta === "Surface" || quote.eta === "Express" ? (
                       <p className="mt-1 text-sm text-muted-foreground">ETA {quote.eta}</p>
@@ -728,7 +789,7 @@ function ParcelCreateOrderPanel({
                         {quote.porterOptions.map((option) => (
                           <label
                             key={option.vehicle}
-                            className="flex cursor-pointer items-center justify-between gap-3 rounded-md border bg-background px-3 py-2 text-sm"
+                            className={`flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm ${quote.vehicle === option.vehicle ? "border-primary bg-background" : "bg-background"}`}
                             onClick={(event) => event.stopPropagation()}
                           >
                             <span className="flex items-center gap-2">
@@ -738,9 +799,10 @@ function ParcelCreateOrderPanel({
                                 checked={quote.vehicle === option.vehicle}
                                 onChange={() => selectPorterVehicle(quote.id, option.vehicle)}
                               />
-                              {option.vehicle}
+                              <VehicleLogo name={option.vehicle} />
+                              <span className="font-medium">{option.vehicle}</span>
                             </span>
-                            <span className="text-muted-foreground">{option.rangeLabel}</span>
+                            <span className="font-semibold">{formatINR(option.price)}</span>
                           </label>
                         ))}
                       </div>
@@ -763,7 +825,7 @@ export function CreateOrderPanel(
   props: ComponentProps<typeof ParcelCreateOrderPanel>
 ) {
   if (props.service.id === "local") {
-    return <LocalShadowfaxPanel {...props} />
+    return <LocalShadowfaxPanel {...props} initialProduct={props.service.product} />
   }
   return <ParcelCreateOrderPanel {...props} />
 }

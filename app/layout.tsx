@@ -10,7 +10,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: "SellersLogin Delivery",
   description: "Delivery dashboard for SellersLogin sellers and admins.",
-  icons: { icon: "/logo-mark.svg" },
+  icons: { icon: "/logo-mark-v6.svg" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

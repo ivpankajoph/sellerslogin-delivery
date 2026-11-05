@@ -32,6 +32,7 @@ import {
   updateShadowfaxOrderData,
 } from '@/features/delivery-system/lib/api'
 import type { CourierOrderSummary } from '@/features/delivery-system/lib/data'
+import { PartnerLogo } from '@/components/shared/partner-logo'
 import { FacetFilter, matchesDateRange, matchesSearch, matchesSelected, TableFilters, uniqueFilterOptions } from '@/components/table-filters'
 
 export function ServiceOrdersPanel() {
@@ -66,11 +67,12 @@ export function ServiceOrdersPanel() {
 
   const searchParams = new URLSearchParams(useLocation({ select: (l) => l.searchStr }))
   const typeFilter = searchParams.get('type')
-  const activeService = DELIVERY_SERVICE_CATALOG.find(s => s.id === typeFilter)
+  const activeService = DELIVERY_SERVICE_CATALOG.find((service) => service.key === typeFilter)
+  const serviceQuery = activeService?.id || typeFilter || ''
 
   const loadOrders = async () => {
     try {
-      const res = await api.get('/delivery-bookings' + (typeFilter ? `?serviceId=${typeFilter}` : ''))
+      const res = await api.get('/delivery-bookings' + (serviceQuery ? `?serviceId=${serviceQuery}` : ''))
       const mappedOrders = res.data?.data?.map((o: any) => ({
         id: o._id,
         serviceId: o.service_id,
@@ -94,7 +96,10 @@ export function ServiceOrdersPanel() {
         sourceOrderId: o.source_order_id,
         waybill: o.waybill || o.external_id,
       })) || []
-      setOrders(mappedOrders)
+      const visibleOrders = activeService?.product
+        ? mappedOrders.filter((order: { orderModel?: string }) => order.orderModel === activeService.product)
+        : mappedOrders
+      setOrders(visibleOrders)
     } catch (e) {
       console.error('Failed to load orders', e)
     }
@@ -241,7 +246,7 @@ export function ServiceOrdersPanel() {
 
   useEffect(() => {
     loadOrders()
-  }, [typeFilter])
+  }, [serviceQuery, activeService?.product])
 
   return (
     <Card>
@@ -301,7 +306,11 @@ export function ServiceOrdersPanel() {
                 <TableCell className="whitespace-nowrap">{order.createdAt ? new Date(order.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '-'}</TableCell>
                 <TableCell className="whitespace-nowrap font-medium">{order.id}</TableCell>
                 <TableCell className="whitespace-nowrap">{[order.serviceTitle || order.serviceId, order.vehicle].filter(Boolean).join(' · ')}</TableCell>
-                <TableCell className="whitespace-nowrap capitalize">{order.partner === 'shadowfax' ? 'Shadowfax' : order.partner === 'delhivery' ? 'Delhivery' : '-'}</TableCell>
+                <TableCell className="whitespace-nowrap capitalize">
+                  {order.partner ? (
+                    <PartnerLogo partner={order.partner} size="xs" />
+                  ) : '-'}
+                </TableCell>
                 <TableCell className="whitespace-nowrap">{order.vendorName || '-'}</TableCell>
                 <TableCell className="whitespace-nowrap">{[order.customerName, order.customerPhone].filter(Boolean).join(' · ') || '-'}</TableCell>
                 <TableCell className="max-w-[240px] truncate whitespace-nowrap">{order.destination}</TableCell>
@@ -371,7 +380,10 @@ export function ServiceOrdersPanel() {
               </div>
               {selectedOrder.partner === 'delhivery' ? (
                 <div className="rounded-lg border p-3 sm:col-span-2">
-                  <p className="text-muted-foreground text-xs">Delhivery</p>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <PartnerLogo partner="delhivery" size="xs" showName={false} />
+                    <p className="text-muted-foreground text-xs font-semibold">Delhivery</p>
+                  </div>
                   <p className="mt-1 text-sm font-medium">{selectedOrder.waybill || 'Not sent to Delhivery yet'}</p>
                   {selectedOrder.waybill ? (
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -413,7 +425,10 @@ export function ServiceOrdersPanel() {
               ) : null}
               {selectedOrder.partner === 'shadowfax' || (selectedOrder.externalId && selectedOrder.partner !== 'delhivery') ? (
                 <div className="rounded-lg border p-3 sm:col-span-2">
-                  <p className="text-muted-foreground text-xs">Shadowfax</p>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <PartnerLogo partner="shadowfax" size="xs" showName={false} />
+                    <p className="text-muted-foreground text-xs font-semibold">Shadowfax</p>
+                  </div>
                   <p className="mt-1 text-sm font-medium">{shadowfaxAwb(selectedOrder) || 'Not sent to Shadowfax yet'}</p>
                   {shadowfaxAwb(selectedOrder) ? (
                     <>

@@ -45,7 +45,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center space-y-2 text-center">
-          <Image src="/logo-mark-v5.svg" alt="SellersLogin Delivery" width={56} height={56} priority className="size-14" />
+          <Image src="/logo-mark-v6.svg" alt="SellersLogin Delivery" width={56} height={56} priority className="size-14" />
           <h1 className="text-2xl font-extrabold tracking-tight">SellersLogin Delivery</h1>
           <p className="text-sm text-muted-foreground">Sign in with your SellersLogin admin or seller account</p>
         </div>

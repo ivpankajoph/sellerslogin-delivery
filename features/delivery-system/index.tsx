@@ -7,7 +7,9 @@ import {
   ArrowRight,
   ClipboardList,
   Headphones,
+  Plus,
   LayoutDashboard,
+  LayoutGrid,
   Loader2,
   RefreshCcw,
   FileText,
@@ -54,7 +56,6 @@ import {
   SidebarMenuSubButton,
 } from '@/components/ui/sidebar'
 import {
-  fetchCourierWarehouses,
   fetchExternalDelhiveryShipments,
   loadCourierOrders,
   type ExternalDelhiveryShipment,
@@ -65,6 +66,8 @@ import {
   type CourierOrderSummary,
 } from '@/features/delivery-system/lib/data'
 import { CreateOrderPanel } from './components/create-order-panel'
+import { ManageAppsPanel } from './manage-apps-panel'
+import { applyDeliveryApps, useDeliveryAppConfig } from './lib/delivery-apps'
 import { DeliveryPromoBanner } from './components/promo-banner'
 import { ServiceOrdersPanel } from './components/service-orders-panel'
 import { ManualOrdersPanel } from './components/manual-orders-panel'
@@ -73,12 +76,14 @@ import { CourierListPage } from '@/features/courier/list'
 import { DeliveryMarkupPanel } from './delivery-markup-panel'
 import { SetPricingPanel } from './set-pricing-panel'
 import { DeliverySupportPanel } from './delivery-support-panel'
+import { PartnerLogo } from '@/components/shared/partner-logo'
 
 type DeliveryView =
   | 'dashboard'
   | 'support'
   | 'delivery-markup'
   | 'set-pricing'
+  | 'manage-apps'
   | 'service-orders'
   | 'website-requests'
   | 'website-orders'
@@ -98,6 +103,7 @@ type DeliveryWorkspaceSection =
   | 'tracking'
   | 'delivery-markup'
   | 'set-pricing'
+  | 'manage-apps'
   | 'support'
   | 'book-vehicle'
   | 'service-orders'
@@ -157,13 +163,16 @@ const isDelivered = (order: CourierOrderSummary) => {
 }
 
 export type DeliveryService = {
+  key: string
   id: string
+  product?: 'hyperlocal' | 'quick_commerce'
   title: string
   badge: string
   summary: string
   bestFor: string
   icon: typeof Truck
   accent: string
+  partners?: string[]
   modes: Array<{ title: string; description: string }>
   vehicleOptions: string[]
   availability: string
@@ -172,16 +181,163 @@ export type DeliveryService = {
   actionPath: string
 }
 
+const D2C_DELIVERY_SERVICE: DeliveryService = {
+  key: 'd2c',
+  id: 'd2c',
+  title: 'All-India Courier',
+  badge: 'Parcel < 20kg',
+  summary:
+    'Ship ecommerce parcels, documents, and small packages anywhere in India.',
+  bestFor: 'Ecommerce, clothing, cosmetics, gifts',
+  icon: Package,
+  accent: 'bg-blue-600 text-white',
+  partners: ['delhivery', 'shadowfax'],
+  modes: [
+    { title: 'Express Delivery', description: 'Fastest delivery by Air.' },
+    {
+      title: 'Surface Delivery',
+      description: 'Economical delivery by Road.',
+    },
+  ],
+  vehicleOptions: ['Parcel Express', 'Parcel Surface'],
+  availability: 'All India delivery via top courier partners.',
+  examples: ['Documents', 'Small parcels', 'Gifts', 'Apparel'],
+  actionLabel: 'Book courier',
+  actionPath: '/courier/book-vehicle',
+}
+
+export const findDeliveryService = (search: string) => {
+  const params = new URLSearchParams(search)
+  const serviceId = params.get('service') || ''
+  const product = params.get('product') || ''
+  if (product) {
+    const named = DELIVERY_SERVICE_CATALOG.find((service) => service.product === product)
+    if (named) return named
+  }
+  if (serviceId === 'd2c') return D2C_DELIVERY_SERVICE
+  return (
+    DELIVERY_SERVICE_CATALOG.find((service) => service.id === serviceId && !service.product) ||
+    DELIVERY_SERVICE_CATALOG.find((service) => service.id === serviceId) ||
+    DELIVERY_SERVICE_CATALOG[0]
+  )
+}
+
+const createDeliveryPath = (
+  service: DeliveryService,
+  options?: { orderId?: string; list?: boolean }
+) => {
+  const params = new URLSearchParams()
+  if (options?.list) {
+    params.set('view', 'service-orders')
+    params.set('type', service.key)
+    return `/delivery-system?${params.toString()}`
+  }
+  params.set('view', 'create-order')
+  params.set('service', service.id)
+  if (service.product) params.set('product', service.product)
+  if (options?.orderId) params.set('orderId', options.orderId)
+  return `/delivery-system?${params.toString()}`
+}
+
 export const DELIVERY_SERVICE_CATALOG: DeliveryService[] = [
   {
+    key: 'quick_commerce',
+    id: 'local',
+    product: 'quick_commerce',
+    title: 'Quick Commerce',
+    badge: 'Under 20kg',
+    summary:
+      'Warehouse quick-commerce delivery for grocery, food, and urgent city orders.',
+    bestFor: 'Grocery, food, urgent store orders',
+    icon: Zap,
+    accent: 'bg-amber-500 text-white',
+    partners: ['shadowfax'],
+    modes: [
+      {
+        title: 'Quick Commerce',
+        description: 'Pickup uses the warehouse code and the full order payload.',
+      },
+    ],
+    vehicleOptions: ['Bike', '3 Wheeler L- 4.5 ft, H-6 Ft'],
+    availability: 'Quick commerce via Shadowfax.',
+    examples: ['Groceries', 'Food', 'Urgent store orders'],
+    actionLabel: 'Book quick commerce',
+    actionPath: '/courier/book-vehicle',
+  },
+  {
+    key: 'hyperlocal',
+    id: 'local',
+    product: 'hyperlocal',
+    title: 'Hyperlocal',
+    badge: 'Within city',
+    summary:
+      'Same-city hyperlocal delivery with a pickup pin and a drop pin on every order.',
+    bestFor: 'Food, documents, small urgent parcels',
+    icon: Package,
+    accent: 'bg-primary text-white',
+    partners: ['shadowfax'],
+    modes: [
+      {
+        title: 'Hyperlocal',
+        description: 'Fastest delivery within city limits.',
+      },
+    ],
+    vehicleOptions: ['Bike', '3 Wheeler L- 4.5 ft, H-6 Ft'],
+    availability: 'Hyperlocal delivery via Shadowfax.',
+    examples: ['Food', 'Documents', 'Urgent items'],
+    actionLabel: 'Book hyperlocal',
+    actionPath: '/courier/book-vehicle',
+  },
+  {
+    key: 'b2b',
+    id: 'b2b',
+    title: 'B2C',
+    badge: 'Light < 750kg',
+    summary:
+      'Light goods movement for retail and consumer deliveries.',
+    bestFor: 'Wholesale stock, FMCG, inventory transfers',
+    icon: Warehouse,
+    accent: 'bg-primary text-white',
+    partners: ['porter', 'shadowfax'],
+    modes: [
+      {
+        title: 'Intra-City Delivery',
+        description: 'Business delivery within the same city.',
+      },
+      {
+        title: 'Inter-City Delivery',
+        description: 'Business delivery from one city to another city.',
+      },
+    ],
+    vehicleOptions: [
+      'L-6ft, H-10 Ft',
+      'L-5.5ft, H-8 Ft',
+      'L-5 ft, H-7 Ft',
+      '3 Wheeler L- 4.5 ft, H-6 Ft',
+    ],
+    availability: 'Available in all major cities.',
+    examples: [
+      'Wholesale inventory',
+      'Retail shop stock transfers',
+      'FMCG products',
+      'Restaurant supplies',
+      'Electronics inventory',
+      'Packaging materials',
+    ],
+    actionLabel: 'Plan B2C delivery',
+    actionPath: '/courier/book-vehicle',
+  },
+  {
+    key: 'heavy-duty',
     id: 'heavy-duty',
-    title: 'Heavy-Duty Delivery',
+    title: 'B2B',
     badge: 'Heavy > 750kg',
     summary:
       'Move large, industrial, construction, furniture, and bulk goods with planned vehicle capacity.',
     bestFor: 'Machines, steel, construction material, equipment',
     icon: Truck,
     accent: 'bg-slate-950 text-white',
+    partners: ['porter'],
     modes: [
       {
         title: 'Intra-City Delivery',
@@ -211,87 +367,7 @@ export const DELIVERY_SERVICE_CATALOG: DeliveryService[] = [
       'Heavy equipment',
       'Furniture and bulk goods',
     ],
-    actionLabel: 'Book heavy vehicle',
-    actionPath: '/courier/book-vehicle',
-  },
-  {
-    id: 'b2b',
-    title: 'Light & Medium Delivery',
-    badge: 'Light < 750kg',
-    summary:
-      'Reliable light goods movement for wholesale, retail, and local B2B deliveries.',
-    bestFor: 'Wholesale stock, FMCG, inventory transfers',
-    icon: Warehouse,
-    accent: 'bg-primary text-white',
-    modes: [
-      {
-        title: 'Intra-City Delivery',
-        description: 'Business delivery within the same city.',
-      },
-      {
-        title: 'Inter-City Delivery',
-        description: 'Business delivery from one city to another city.',
-      },
-    ],
-    vehicleOptions: [
-      'L-6ft, H-10 Ft',
-      'L-5.5ft, H-8 Ft',
-      'L-5 ft, H-7 Ft',
-      '3 Wheeler L- 4.5 ft, H-6 Ft',
-    ],
-    availability: 'Available in all major cities.',
-    examples: [
-      'Wholesale inventory',
-      'Retail shop stock transfers',
-      'FMCG products',
-      'Restaurant supplies',
-      'Electronics inventory',
-      'Packaging materials',
-    ],
-    actionLabel: 'Plan light delivery',
-    actionPath: '/courier/book-vehicle',
-  },
-  {
-    id: 'd2c',
-    title: 'All-India Courier',
-    badge: 'Parcel < 20kg',
-    summary:
-      'Ship ecommerce parcels, documents, and small packages anywhere in India.',
-    bestFor: 'Ecommerce, clothing, cosmetics, gifts',
-    icon: Package,
-    accent: 'bg-blue-600 text-white',
-    modes: [
-      { title: 'Express Delivery', description: 'Fastest delivery by Air.' },
-      {
-        title: 'Surface Delivery',
-        description: 'Economical delivery by Road.',
-      },
-    ],
-    vehicleOptions: ['Parcel Express', 'Parcel Surface'],
-    availability: 'All India delivery via top courier partners.',
-    examples: ['Documents', 'Small parcels', 'Gifts', 'Apparel'],
-    actionLabel: 'Book courier',
-    actionPath: '/courier/book-vehicle',
-  },
-  {
-    id: 'local',
-    title: 'Local Quick Delivery',
-    badge: 'Hyperlocal < 20kg',
-    summary:
-      'Same-day hyperlocal delivery for food, grocery, and urgent documents.',
-    bestFor: 'Food, documents, small urgent parcels',
-    icon: Zap,
-    accent: 'bg-amber-500 text-white',
-    modes: [
-      {
-        title: 'Hyperlocal Delivery',
-        description: 'Fastest delivery within city limits.',
-      },
-    ],
-    vehicleOptions: ['Bike', '3 Wheeler L- 4.5 ft, H-6 Ft'],
-    availability: 'Hyperlocal delivery via top delivery partners.',
-    examples: ['Food', 'Groceries', 'Documents', 'Urgent items'],
-    actionLabel: 'Book quick delivery',
+    actionLabel: 'Book heavy delivery',
     actionPath: '/courier/book-vehicle',
   },
 ]
@@ -321,11 +397,13 @@ function QuickAction({
   title,
   subtitle,
   onClick,
+  partner,
 }: {
   icon: typeof Truck
   title: string
   subtitle: string
   onClick: () => void
+  partner?: string
 }) {
   return (
     <button
@@ -334,7 +412,11 @@ function QuickAction({
       className='flex w-full items-center gap-3 rounded-md border bg-background p-3 text-left transition hover:bg-muted'
     >
       <span className='flex size-9 items-center justify-center rounded-md border bg-muted'>
-        <Icon className='size-4' />
+        {partner ? (
+          <PartnerLogo partner={partner} size="xs" showName={false} />
+        ) : (
+          <Icon className='size-4' />
+        )}
       </span>
       <span className='min-w-0 flex-1'>
         <span className='block text-sm font-medium'>{title}</span>
@@ -359,9 +441,15 @@ export function DeliveryWorkspaceShell({
   const authUser = useSelector((state: RootState) => state.auth?.user)
   const role = String(authUser?.role || '').toLowerCase()
   const isAdmin = role === 'admin' || role === 'superadmin'
+  const { config: appConfig } = useDeliveryAppConfig()
+  const deliveryServices = useMemo(
+    () => DELIVERY_SERVICE_CATALOG.map((service) => applyDeliveryApps(service, appConfig)),
+    [appConfig]
+  )
 
   const [walletBalance, setWalletBalance] = useState<number | null>(null)
   const [warehousePromptOpen, setWarehousePromptOpen] = useState(false)
+  const [createRequestOpen, setCreateRequestOpen] = useState(false)
   const [requestsOpen, setRequestsOpen] = useState(
     activeSection === 'service-orders' || activeSection === 'courier-list'
   )
@@ -412,17 +500,7 @@ export function DeliveryWorkspaceShell({
     if (ordersGroupActive) setOrdersOpen(true)
   }, [ordersGroupActive])
 
-  const openCreateOrder = async (serviceId = 'd2c') => {
-    try {
-      const rows = await fetchCourierWarehouses()
-      if (!rows.length) {
-        setWarehousePromptOpen(true)
-        return
-      }
-    } catch {
-      setWarehousePromptOpen(true)
-      return
-    }
+  const openCreateOrder = (serviceId = 'd2c') => {
     openPath(`/delivery-system?view=create-order&service=${serviceId}`)
   }
 
@@ -465,6 +543,20 @@ export function DeliveryWorkspaceShell({
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => setCreateRequestOpen(true)}
+                    tooltip='Create Delivery Request'
+                    className='h-10 cursor-pointer text-sm hover:bg-muted/60 hover:text-foreground'
+                  >
+                    <Plus />
+                    <span className='truncate'>Create Delivery Request</span>
+                    <span className='ml-auto shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground'>
+                      New
+                    </span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+
                 <Collapsible
                   open={requestsOpen}
                   onOpenChange={setRequestsOpen}
@@ -473,7 +565,6 @@ export function DeliveryWorkspaceShell({
                   <SidebarMenuItem>
                     <CollapsibleTrigger asChild>
                       <SidebarMenuButton
-                        isActive={activeSection === 'service-orders'}
                         tooltip='Delivery Requests'
                         className='h-10 cursor-pointer text-sm hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
                       >
@@ -509,16 +600,14 @@ export function DeliveryWorkspaceShell({
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                         {DELIVERY_SERVICE_CATALOG.map((service) => (
-                          <SidebarMenuSubItem key={service.id}>
+                          <SidebarMenuSubItem key={service.key}>
                             <SidebarMenuSubButton
                               isActive={
                                 activeSection === 'service-orders' &&
-                                activeType === service.id
+                                activeType === service.key
                               }
                               onClick={() =>
-                                openPath(
-                                  `/delivery-system?view=service-orders&type=${service.id}`
-                                )
+                                openPath(createDeliveryPath(service, { list: true }))
                               }
                               className='h-9 w-full cursor-pointer text-sm hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
                             >
@@ -539,7 +628,6 @@ export function DeliveryWorkspaceShell({
                   <SidebarMenuItem>
                     <CollapsibleTrigger asChild>
                       <SidebarMenuButton
-                        isActive={ordersGroupActive}
                         tooltip='All Orders'
                         className='h-10 cursor-pointer text-sm hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
                       >
@@ -641,6 +729,20 @@ export function DeliveryWorkspaceShell({
                   </SidebarMenuItem>
                 ) : null}
 
+                {isAdmin ? (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={activeSection === 'manage-apps'}
+                      onClick={() => openPath('/delivery-system?view=manage-apps')}
+                      tooltip='Manage Apps'
+                      className='h-10 cursor-pointer text-sm hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+                    >
+                      <LayoutGrid />
+                      <span>Manage Apps</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ) : null}
+
                 {role === 'superadmin' && (
                   <SidebarMenuItem>
                     <SidebarMenuButton
@@ -672,6 +774,47 @@ export function DeliveryWorkspaceShell({
         </>
       }
     >
+      <Dialog open={createRequestOpen} onOpenChange={setCreateRequestOpen}>
+        <DialogContent className='sm:max-w-3xl'>
+          <DialogHeader>
+            <DialogTitle>Create Delivery Request</DialogTitle>
+            <DialogDescription>
+              Choose a delivery type. The matching request page opens next.
+            </DialogDescription>
+          </DialogHeader>
+          <div className='grid gap-4 sm:grid-cols-2'>
+            {deliveryServices.map((service) => {
+              const Icon = service.icon
+              return (
+                <button
+                  key={service.key}
+                  type='button'
+                  onClick={() => {
+                    setCreateRequestOpen(false)
+                    openPath(createDeliveryPath(service))
+                  }}
+                  className='flex h-full flex-col rounded-xl border bg-card p-5 text-left shadow-sm transition hover:bg-muted/40'
+                >
+                  <Icon className='size-5 text-primary' />
+                  <span className='mt-4 text-sm font-semibold text-primary'>{service.badge}</span>
+                  <span className='mt-1 text-base font-semibold'>{service.title}</span>
+                  {service.partners?.length ? (
+                    <div className='mt-2 flex flex-wrap items-center gap-1.5'>
+                      {service.partners.map((partner) => (
+                        <PartnerLogo key={partner} partner={partner} size='xs' badge />
+                      ))}
+                    </div>
+                  ) : null}
+                  <span className='mt-4 inline-flex w-fit items-center gap-2 rounded-md border border-primary bg-background px-3 py-2 text-sm font-medium text-primary'>
+                    Create order
+                    <ArrowRight className='size-4' />
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={warehousePromptOpen} onOpenChange={setWarehousePromptOpen}>
         <DialogContent>
           <DialogHeader>
@@ -717,6 +860,11 @@ export function DeliverySystemDashboard() {
   const [error, setError] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
   const [deliveryTarget, setDeliveryTarget] = useState<CourierOrderSummary | null>(null)
+  const { config: appConfig } = useDeliveryAppConfig()
+  const deliveryServices = useMemo(
+    () => DELIVERY_SERVICE_CATALOG.map((service) => applyDeliveryApps(service, appConfig)),
+    [appConfig]
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -788,6 +936,8 @@ export function DeliverySystemDashboard() {
           ? 'delivery-markup'
           : view === 'set-pricing'
             ? 'set-pricing'
+          : view === 'manage-apps'
+            ? 'manage-apps'
           : view === 'service-orders'
             ? 'service-orders'
             : view === 'website-requests'
@@ -830,6 +980,8 @@ export function DeliverySystemDashboard() {
               ? 'delivery-markup'
               : activeView === 'set-pricing'
                 ? 'set-pricing'
+              : activeView === 'manage-apps'
+                ? 'manage-apps'
               : activeView === 'service-orders' || activeView === 'website-requests'
                 ? activeView === 'website-requests'
                   ? 'courier-list'
@@ -853,23 +1005,26 @@ export function DeliverySystemDashboard() {
         <div className='space-y-6'>
           <DeliveryPromoBanner />
           <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-4'>
-            {DELIVERY_SERVICE_CATALOG.map((service) => {
+            {deliveryServices.map((service) => {
               const Icon = service.icon
               return (
                 <button
-                  key={service.id}
+                  key={service.key}
                   type='button'
-                  onClick={() =>
-                    openPath(`/delivery-system?view=create-order&service=${service.id}`)
-                  }
+                  onClick={() => openPath(createDeliveryPath(service))}
                   className='flex h-full flex-col rounded-xl border bg-card p-5 text-left shadow-sm transition hover:bg-muted/40'
                 >
-                  <span className='flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground'>
-                    <Icon className='size-5' />
-                  </span>
+                  <Icon className='size-5 text-primary' />
                   <span className='mt-4 text-sm font-semibold text-primary'>{service.badge}</span>
                   <span className='mt-1 text-base font-semibold'>{service.title}</span>
-                  <span className='mt-auto inline-flex w-fit items-center gap-2 rounded-md border border-primary bg-white px-3 py-2 text-sm font-medium text-primary'>
+                  {service.partners?.length ? (
+                    <div className='mt-2 flex flex-wrap items-center gap-1.5'>
+                      {service.partners.map((p) => (
+                        <PartnerLogo key={p} partner={p} size="xs" badge />
+                      ))}
+                    </div>
+                  ) : null}
+                  <span className='mt-auto pt-3 inline-flex w-fit items-center gap-2 rounded-md border border-primary bg-background px-3 py-2 text-sm font-medium text-primary'>
                     Create order
                     <ArrowRight className='size-4' />
                   </span>
@@ -889,6 +1044,31 @@ export function DeliverySystemDashboard() {
           </div>
 
           <Card>
+            <CardHeader className='pb-3'>
+              <CardTitle className='text-base font-semibold'>Delivery & Courier Apps</CardTitle>
+              <CardDescription>
+                Direct automated integration with leading logistics networks
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className='grid gap-3 sm:grid-cols-3'>
+                <div className='rounded-xl border border-border bg-muted/20 p-3'>
+                  <PartnerLogo partner="delhivery" size="sm" />
+                  <p className='mt-1 truncate text-xs text-muted-foreground'>All-India courier & surface shipping</p>
+                </div>
+                <div className='rounded-xl border border-border bg-muted/20 p-3'>
+                  <PartnerLogo partner="shadowfax" size="sm" />
+                  <p className='mt-1 truncate text-xs text-muted-foreground'>Hyperlocal & quick commerce delivery</p>
+                </div>
+                <div className='rounded-xl border border-border bg-muted/20 p-3'>
+                  <PartnerLogo partner="porter" size="sm" />
+                  <p className='mt-1 truncate text-xs text-muted-foreground'>Trucks, tempos & heavy goods logistics</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
             <CardHeader>
               <CardTitle>Quick actions</CardTitle>
             </CardHeader>
@@ -899,6 +1079,7 @@ export function DeliverySystemDashboard() {
                     icon={Warehouse}
                     title='Warehouse'
                     subtitle='Create and manage Delhivery pickup locations'
+                    partner='delhivery'
                     onClick={() => openPath('/courier/warehouses')}
                   />
                 )}
@@ -935,6 +1116,15 @@ export function DeliverySystemDashboard() {
         />
       ) : activeView === 'delivery-markup' ? (
         <DeliveryMarkupPanel />
+      ) : activeView === 'manage-apps' ? (
+        isAdmin ? <ManageAppsPanel /> : (
+          <Card>
+            <CardHeader>
+              <CardTitle>Manage Apps</CardTitle>
+              <CardDescription>This page is available to admin accounts only.</CardDescription>
+            </CardHeader>
+          </Card>
+        )
       ) : activeView === 'set-pricing' ? (
         isAdmin ? <SetPricingPanel /> : (
           <Card>
@@ -963,10 +1153,8 @@ export function DeliverySystemDashboard() {
         />
       ) : activeView === 'create-order' ? (
         <CreateOrderPanel
-          service={
-            DELIVERY_SERVICE_CATALOG.find((service) => service.id === new URLSearchParams(searchStr).get('service')) ||
-            DELIVERY_SERVICE_CATALOG[2]
-          }
+          key={searchStr}
+          service={applyDeliveryApps(findDeliveryService(searchStr), appConfig)}
           existingOrder={orders.find((order) => order.id === new URLSearchParams(searchStr).get('orderId')) || null}
           onCreateWarehouse={() => openPath('/courier/warehouses')}
           onPlaced={() => openPath('/delivery-system?view=service-orders')}
@@ -983,24 +1171,31 @@ export function DeliverySystemDashboard() {
             </DialogDescription>
           </DialogHeader>
           <div className='grid gap-2'>
-            {DELIVERY_SERVICE_CATALOG.map((service) => {
+            {deliveryServices.map((service) => {
               const Icon = service.icon
               return (
                 <button
-                  key={service.id}
+                  key={service.key}
                   type='button'
                   onClick={() => {
                     if (!deliveryTarget) return
-                    openPath(`/delivery-system?view=create-order&orderId=${deliveryTarget.id}&service=${service.id}`)
+                    openPath(createDeliveryPath(service, { orderId: deliveryTarget.id }))
                     setDeliveryTarget(null)
                   }}
                   className='flex items-center gap-3 rounded-lg border p-3 text-left transition hover:bg-muted/50'
                 >
-                  <span className='flex size-10 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground'>
-                    <Icon className='size-5' />
-                  </span>
-                  <span className='min-w-0'>
-                    <span className='block text-sm font-semibold text-primary'>{service.badge}</span>
+                  <Icon className='size-5 shrink-0 text-primary' />
+                  <span className='min-w-0 flex-1'>
+                    <div className='flex items-center justify-between gap-2'>
+                      <span className='block text-sm font-semibold text-primary'>{service.badge}</span>
+                      {service.partners?.length ? (
+                        <div className='flex items-center gap-1'>
+                          {service.partners.map((p) => (
+                            <PartnerLogo key={p} partner={p} size="xs" badge />
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
                     <span className='block text-sm font-medium'>{service.title}</span>
                     <span className='block text-sm text-muted-foreground'>{service.bestFor}</span>
                   </span>

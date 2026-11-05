@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/table'
 import api from '@/lib/axios'
 import { formatINR } from '@/lib/currency'
+import { PartnerLogo } from '@/components/shared/partner-logo'
 import type { RootState } from '@/store'
 
 type Markup = {
@@ -215,8 +216,8 @@ export function DeliveryMarkupPanel() {
             >
               <div className='flex items-start justify-between gap-4'>
                 <div>
-                  <h2 className='text-xl font-semibold text-slate-950'>
-                    {partnerLabels[item.partner_id]}
+                  <h2 className='flex items-center gap-2 text-xl font-semibold text-slate-950'>
+                    <PartnerLogo partner={item.partner_id} name={partnerLabels[item.partner_id]} size="md" />
                   </h2>
                   <p className='mt-2 max-w-sm text-sm text-slate-500'>
                     This markup is added only to the vendor-facing courier price.
@@ -321,7 +322,9 @@ export function DeliveryMarkupPanel() {
                       ? new Date(row.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
                       : 'Not available'}
                   </TableCell>
-                  <TableCell className='whitespace-nowrap capitalize'>{row.partner_id || 'all'}</TableCell>
+                  <TableCell className='whitespace-nowrap capitalize'>
+                    <PartnerLogo partner={row.partner_id} size="xs" />
+                  </TableCell>
                   <TableCell>{row.order_number || 'Not available'}</TableCell>
                   <TableCell className='font-medium'>{formatINR(Number(row.actual_price || 0))}</TableCell>
                   <TableCell>{formatINR(Number(row.hiked_price || 0))}</TableCell>

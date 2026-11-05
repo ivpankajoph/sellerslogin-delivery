@@ -1,18 +1,14 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { Flag, MapPin } from "lucide-react"
 import { useNavigate } from "@/lib/router"
 import { toast } from "sonner"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -25,6 +21,7 @@ import {
 } from "@/components/ui/select"
 import {
   checkHyperlocalServiceability,
+  fetchDelhiveryShippingEstimate,
   geocodeDeliveryAddress,
   createManualCourierOrder,
   fetchShadowfaxWarehouses,
@@ -34,18 +31,26 @@ import {
   type ShadowfaxWarehouse,
 } from "@/features/delivery-system/lib/api"
 import { IndianStateSelect } from "@/features/delivery-system/components/indian-state-select"
-import { LocationPinMap } from "@/features/delivery-system/components/location-pin-map"
+import { PartnerLogo } from "@/components/shared/partner-logo"
+import { VehicleLogo } from "@/components/shared/vehicle-logo"
+import { useDeliveryAppConfig } from "@/features/delivery-system/lib/delivery-apps"
 import api from "@/lib/axios"
 import { formatINR } from "@/lib/currency"
+import { cn } from "@/lib/utils"
 import type { CourierOrderSummary } from "@/features/delivery-system/lib/data"
 
 type Product = "hyperlocal" | "quick_commerce"
+type DeliveryPartner = "shadowfax" | "porter" | "delhivery"
 
 type ItemDraft = {
   id: string
   name: string
   price: string
   quantity: string
+  weight: string
+  length: string
+  breadth: string
+  height: string
   hsn_code: string
   invoice_no: string
   sku_id: string
@@ -93,6 +98,10 @@ const blankItem = (): ItemDraft => {
     name: "",
     price: "",
     quantity: "1",
+    weight: "",
+    length: "",
+    breadth: "",
+    height: "",
     hsn_code: "",
     invoice_no: `INV-${id.slice(-8)}`,
     sku_id: id,
@@ -232,6 +241,89 @@ function TextField({
   )
 }
 
+function AddressSuggest({
+  label,
+  value,
+  onText,
+  onPlace,
+}: {
+  label: string
+  value: string
+  onText: (value: string) => void
+  onPlace: (place: { description: string; city: string; state: string; pincode: string; latitude: string; longitude: string }) => void
+}) {
+  const [items, setItems] = useState<Array<{ placeId: string; description: string }>>([])
+  const [open, setOpen] = useState(false)
+  const picked = useRef("")
+
+  useEffect(() => {
+    const query = value.trim()
+    if (query.length < 3 || query === picked.current) {
+      setItems([])
+      setOpen(false)
+      return
+    }
+    const handle = window.setTimeout(() => {
+      void api.post("/shadowfax/places/autocomplete", { input: query }).then((response) => {
+        const predictions = Array.isArray(response?.data?.predictions) ? response.data.predictions : []
+        setItems(predictions)
+        setOpen(predictions.length > 0)
+      }).catch(() => {
+        setItems([])
+        setOpen(false)
+      })
+    }, 300)
+    return () => window.clearTimeout(handle)
+  }, [value])
+
+  return (
+    <div className="relative space-y-2 md:col-span-2">
+      <Label>{label}</Label>
+      <Input
+        value={value}
+        autoComplete="off"
+        placeholder="Start typing a place or area"
+        onChange={(event) => {
+          picked.current = ""
+          onText(event.target.value)
+        }}
+        onFocus={() => { if (items.length) setOpen(true) }}
+        onBlur={() => window.setTimeout(() => setOpen(false), 150)}
+      />
+      {open ? (
+        <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-md border bg-background shadow-md">
+          {items.map((item) => (
+            <button
+              key={item.placeId}
+              type="button"
+              className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                void api.post("/shadowfax/places/details", { placeId: item.placeId, description: item.description }).then((response) => {
+                  const place = response?.data || {}
+                  const description = String(place.description || item.description)
+                  picked.current = description
+                  onPlace({
+                    description,
+                    city: String(place.city || ""),
+                    state: String(place.state || ""),
+                    pincode: String(place.pincode || ""),
+                    latitude: place.latitude == null ? "" : String(place.latitude),
+                    longitude: place.longitude == null ? "" : String(place.longitude),
+                  })
+                  setOpen(false)
+                }).catch(() => setOpen(false))
+              }}
+            >
+              {item.description}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function CheckField({
   label,
   checked,
@@ -267,19 +359,35 @@ export function LocalShadowfaxPanel({
   existingOrder,
   onPlaced,
   onCreateWarehouse,
+  initialProduct,
 }: {
-  service: { id: string; title: string; vehicleOptions: string[] }
+  service: { id: string; key?: string; title: string; vehicleOptions: string[]; partners?: string[] }
   existingOrder?: CourierOrderSummary | null
   onPlaced: () => void
   onCreateWarehouse: () => void
+  initialProduct?: Product
 }) {
   const [warehouses, setWarehouses] = useState<ShadowfaxWarehouse[]>([])
   const [warehousesReady, setWarehousesReady] = useState(false)
   const [warehouseId, setWarehouseId] = useState("")
-  const [product, setProduct] = useState<Product>("hyperlocal")
+  const [product, setProduct] = useState<Product>(initialProduct || "hyperlocal")
+  const [pickupForm, setPickupForm] = useState({
+    name: "",
+    phone: "",
+    address: "",
+    address_line_2: "",
+    city: "",
+    state: "",
+    pincode: "",
+    unique_code: "",
+  })
+  const [vehicleChoices, setVehicleChoices] = useState<Array<{ partner: string; name: string; price: number; slabKm?: number }>>([])
+  const [selectedChoice, setSelectedChoice] = useState<{ partner: string; name: string; price: number; slabKm?: number } | null>(null)
+  const { vehicles: allowedVehicleMap } = useDeliveryAppConfig()
   const [name, setName] = useState("")
   const [phone, setPhone] = useState("")
   const [address, setAddress] = useState("")
+  const [addressLine2, setAddressLine2] = useState("")
   const [city, setCity] = useState("")
   const [state, setState] = useState("")
   const [pincode, setPincode] = useState("")
@@ -298,6 +406,8 @@ export function LocalShadowfaxPanel({
   const [options, setOptions] = useState(createOptions)
   const [returnDetails, setReturnDetails] = useState(emptyReturn)
   const [checking, setChecking] = useState(false)
+  const [routeInfo, setRouteInfo] = useState({ distanceText: "", durationText: "", distanceKm: 0 })
+  const [priceOpen, setPriceOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [placing, setPlacing] = useState(false)
   const [savedOrder, setSavedOrder] = useState<CourierOrderSummary | null>(existingOrder || null)
@@ -410,6 +520,46 @@ export function LocalShadowfaxPanel({
     return () => window.removeEventListener("message", onMessage)
   }, [])
 
+  const pickupLine = [pickupForm.address, pickupForm.city, pickupForm.state, pickupForm.pincode, "India"].map(readText).filter(Boolean).join(", ")
+  const dropLine = [address, city, state, pincode, "India"].map(readText).filter(Boolean).join(", ")
+  const routeMap = pickupLine.length > 12 && dropLine.length > 12
+    ? `${String(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081/api").replace(/\/$/, "")}/v1/public/maps-directions?origin=${encodeURIComponent(pickupLine)}&destination=${encodeURIComponent(dropLine)}`
+    : ""
+
+  useEffect(() => {
+    if (!routeMap) {
+      setRouteInfo({ distanceText: "", durationText: "", distanceKm: 0 })
+      return
+    }
+    const handle = window.setTimeout(() => {
+      void api.post("/shadowfax/distance", {
+        pickup: {
+          address_line_1: pickupForm.address,
+          city: pickupForm.city,
+          state: pickupForm.state,
+          pincode: pickupForm.pincode,
+          latitude: pickupLatitude || undefined,
+          longitude: pickupLongitude || undefined,
+        },
+        drop: {
+          address_line_1: address,
+          city,
+          state,
+          pincode,
+          latitude: latitude || undefined,
+          longitude: longitude || undefined,
+        },
+      }).then((response) => {
+        setRouteInfo({
+          distanceText: String(response?.data?.distanceText || ""),
+          durationText: String(response?.data?.durationText || ""),
+          distanceKm: Number(response?.data?.distanceKm || 0),
+        })
+      }).catch(() => setRouteInfo({ distanceText: "", durationText: "", distanceKm: 0 }))
+    }, 700)
+    return () => window.clearTimeout(handle)
+  }, [routeMap, pickupForm.address, pickupForm.city, pickupForm.state, pickupForm.pincode, pickupLatitude, pickupLongitude, address, city, state, pincode, latitude, longitude])
+
   useEffect(() => {
     const query = [address, city, state, pincode].map(readText).filter(Boolean).join(", ")
     if (query.length < 5) return
@@ -515,6 +665,10 @@ export function LocalShadowfaxPanel({
       name: readText(item.name),
       price: Number(item.price || 0),
       quantity: Number(item.quantity || 1),
+      weight_grams: Number(item.weight || 0) || undefined,
+      length_cm: Number(item.length || 0) || undefined,
+      breadth_cm: Number(item.breadth || 0) || undefined,
+      height_cm: Number(item.height || 0) || undefined,
       sku_name: readText(item.name),
       sku_id: readText(item.sku_id || item.id),
       hsn_code: readText(item.hsn_code),
@@ -540,18 +694,18 @@ export function LocalShadowfaxPanel({
     }))
 
     const pickup = {
-      name: warehouse?.name || "",
-      contact_number: warehouse?.contact || warehouse?.phone || "",
-      contact: warehouse?.contact || warehouse?.phone || "",
-      address: pickupAddress,
-      address_line_1: warehouse?.address_line_1 || "",
-      address_line_2: warehouse?.address_line_2 || "",
-      city: warehouse?.city || "",
-      state: warehouse?.state || "",
-      pincode: warehouse?.pincode || warehouse?.pin || "",
+      name: pickupForm.name || warehouse?.name || "",
+      contact_number: pickupForm.phone || warehouse?.contact || warehouse?.phone || "",
+      contact: pickupForm.phone || warehouse?.contact || warehouse?.phone || "",
+      address: pickupForm.address || pickupAddress,
+      address_line_1: pickupForm.address || warehouse?.address_line_1 || "",
+      address_line_2: pickupForm.address_line_2 || warehouse?.address_line_2 || "",
+      city: pickupForm.city || warehouse?.city || "",
+      state: pickupForm.state || warehouse?.state || "",
+      pincode: pickupForm.pincode || warehouse?.pincode || warehouse?.pin || "",
       latitude: pickupLatitude || warehouse?.latitude || "",
       longitude: pickupLongitude || warehouse?.longitude || "",
-      unique_code: warehouse?.unique_code || "",
+      unique_code: pickupForm.unique_code || warehouse?.unique_code || "",
     }
 
     const drop = {
@@ -561,7 +715,7 @@ export function LocalShadowfaxPanel({
       phone,
       address,
       address_line_1: address,
-      address_line_2: options.address_line_2,
+      address_line_2: addressLine2 || options.address_line_2,
       city,
       state,
       pincode,
@@ -626,11 +780,106 @@ export function LocalShadowfaxPanel({
     }
   }
 
+  const showAppPrices = async () => {
+    if (!readText(city) || !readText(pickupForm.city)) return toast.error("Pickup and drop city are required before checking the price")
+    const serviceKey = service.key || (product === "hyperlocal" ? "hyperlocal" : "quick_commerce")
+    const apps = (service.partners?.length ? service.partners : ["shadowfax", "porter"]) as DeliveryPartner[]
+    const pickup = {
+      address_line_1: pickupForm.address,
+      city: pickupForm.city,
+      state: pickupForm.state,
+      pincode: pickupForm.pincode,
+      latitude: pickupLatitude || undefined,
+      longitude: pickupLongitude || undefined,
+      formatted_address: [pickupForm.address, pickupForm.city, pickupForm.state, pickupForm.pincode].filter(Boolean).join(", "),
+    }
+    const drop = {
+      address_line_1: address,
+      city,
+      state,
+      pincode,
+      latitude: latitude || undefined,
+      longitude: longitude || undefined,
+      formatted_address: [address, city, state, pincode].filter(Boolean).join(", "),
+    }
+    setChecking(true)
+    try {
+      const locate = async (point: typeof pickup) => {
+        const found = await geocodeDeliveryAddress(point).catch(() => null)
+        const latitude = Number(found?.latitude)
+        const longitude = Number(found?.longitude)
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return point
+        return { ...point, latitude, longitude }
+      }
+      const locatedPickup = await locate(pickup)
+      const locatedDrop = await locate(drop)
+      const distance = await api.post("/shadowfax/distance", { pickup: locatedPickup, drop: locatedDrop }).then((response) => response.data).catch(() => null)
+      const straightKm = (() => {
+        const fromLat = Number(locatedPickup.latitude)
+        const fromLng = Number(locatedPickup.longitude)
+        const toLat = Number(locatedDrop.latitude)
+        const toLng = Number(locatedDrop.longitude)
+        if (![fromLat, fromLng, toLat, toLng].every(Number.isFinite)) return 0
+        const toRad = (value: number) => (value * Math.PI) / 180
+        const dLat = toRad(toLat - fromLat)
+        const dLng = toRad(toLng - fromLng)
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(fromLat)) * Math.cos(toRad(toLat)) * Math.sin(dLng / 2) ** 2
+        return Math.max(0.5, 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(a))) * 1.3)
+      })()
+      const distanceKm = Number(distance?.distanceKm || straightKm || 0)
+      setRouteInfo({
+        distanceText: String(distance?.distanceText || (distanceKm ? `${distanceKm.toFixed(1)} km` : "")),
+        durationText: String(distance?.durationText || ""),
+        distanceKm,
+      })
+      const groups = await Promise.all(apps.map(async (app) => {
+        const saved = allowedVehicleMap?.[serviceKey]?.[app]
+        const allowed = Array.isArray(saved) && saved.length ? saved : undefined
+        if (app === "delhivery") {
+          const estimate = await fetchDelhiveryShippingEstimate({
+            md: "S",
+            cgm: items[0]?.weight || options.actual_weight || "500",
+            o_pin: pickupForm.pincode,
+            d_pin: pincode,
+            ss: "Delivered",
+            pt: paid === "false" ? "COD" : "Pre-paid",
+          }).catch(() => null)
+          const price = Number(estimate?.estimate?.estimated_charge || 0)
+          const names = allowed || ["Courier"]
+          return names.map((name) => ({ partner: app, name, price }))
+        }
+        const response = await api.post(app === "porter" ? "/delivery-pricing/porter-quote" : "/delivery-pricing/shadowfax-quote", {
+          partner: app,
+          city: pickupForm.city || city,
+          service_id: "local",
+          distance_km: distanceKm,
+          allowed_vehicles: allowed,
+          pickup: locatedPickup,
+          drop: locatedDrop,
+        }, { timeout: 30000 }).catch(() => null)
+        const quoted = Array.isArray(response?.data?.data?.vehicles) ? response.data.data.vehicles : []
+        return quoted
+          .filter((vehicle: { available?: boolean; name?: string }) => vehicle.available && readText(vehicle.name))
+          .filter((vehicle: { name?: string }) => !allowed || allowed.some((name) => name.toLowerCase() === readText(vehicle.name).toLowerCase()))
+          .map((vehicle: { name?: string; price?: number; slab_km?: number }) => ({ partner: app, name: readText(vehicle.name), price: Number(vehicle.price || 0), slabKm: Number(vehicle.slab_km || 0) || undefined }))
+      }))
+      const choices = groups.flat()
+      setVehicleChoices(choices)
+      setSelectedChoice(null)
+      if (choices.length) setPriceOpen(true)
+      else toast.error(distanceKm > 0 ? "No fare slab matched this distance for the selected apps." : "Distance could not be calculated, so the vehicle fare was not found.")
+    } catch (error) {
+      toast.error(messageOf(error))
+    } finally {
+      setChecking(false)
+    }
+  }
+
   const checkPrice = async () => {
-    if (!warehouse) return toast.error("Select a Shadowfax warehouse")
     if (!readText(name) || !readText(phone) || !readText(address) || !readText(city)) {
       return toast.error("Customer name, phone, address, and city are required")
     }
+    if (!warehouse) return toast.error("Select a Shadowfax warehouse")
     if (!amount || Number(amount) <= 0) return toast.error("Order value is required")
     if (!items.some((item) => readText(item.name) && Number(item.price) >= 0 && Number(item.quantity) > 0)) {
       return toast.error("Add at least one item with a name, price, and quantity")
@@ -850,34 +1099,125 @@ export function LocalShadowfaxPanel({
     }
   }
 
+  const placeSelected = async () => {
+    if (!selectedChoice) return toast.error("Select a vehicle before placing the order")
+    if (!readText(name) || !readText(phone) || !readText(address) || !readText(city) || !readText(state) || !readText(pincode)) {
+      return toast.error("Fill the drop name, phone, address, city, state, and pincode")
+    }
+    if (!readText(pickupForm.name) || !readText(pickupForm.phone) || !readText(pickupForm.address) || !readText(pickupForm.city)) {
+      return toast.error("Fill the pickup name, phone, address, and city")
+    }
+
+    setPlacing(true)
+    try {
+      let order = existingOrder || savedOrder || null
+      if (!order) {
+        const created = await createManualCourierOrder({
+          customer: {
+            name,
+            phone,
+            address_line_1: address,
+            address_line_2: options.address_line_2,
+            city,
+            state,
+            pincode,
+            country: "India",
+          },
+          item: {
+            name: items[0]?.name || "Item",
+            quantity: Number(items[0]?.quantity || 1),
+            unit_price: Number(items[0]?.price || amount || 0),
+            sku: items[0]?.sku_id || items[0]?.id,
+            hsn_code: items[0]?.hsn_code,
+            category: items[0]?.category,
+          },
+          shipment: {
+            payment_mode: paid === "false" ? "cod" : "prepaid",
+            total_amount: Number(options.total_amount || amount || 0),
+          },
+        })
+        order = created.order
+        if (order) setSavedOrder(order)
+      }
+      if (!order?.id) throw new Error("Order could not be created")
+
+      let externalId = ""
+      let trackUrl = ""
+      if (selectedChoice.partner === "shadowfax" && warehouse) {
+        try {
+          const body = { ...buildBodies(), order_id: order.id }
+          const placed = product === "hyperlocal" ? await placeHyperlocalOrder(body) : await placeQuickCommerceOrder(body)
+          const summary = placed?.summary || {}
+          externalId = readText(summary.sfx_order_id || summary.awb_number || summary.external_id)
+          trackUrl = readText(summary.track_url)
+        } catch {
+          externalId = ""
+        }
+      }
+
+      const booking = await api.post("/delivery-bookings", {
+        service_id: service.id || "local",
+        vehicle: selectedChoice.name,
+        vendor_name: pickupForm.name || warehouse?.name,
+        partner: selectedChoice.partner,
+        order_model: product,
+        external_id: externalId,
+        tracking_url: trackUrl,
+        estimated_price: selectedChoice.price,
+        duration_text: routeInfo.durationText,
+        distance_km: routeInfo.distanceKm,
+        source_order_id: order.id,
+        pickup: {
+          name: pickupForm.name,
+          phone: pickupForm.phone,
+          address_line_1: pickupForm.address,
+          address_line_2: pickupForm.address_line_2,
+          city: pickupForm.city,
+          state: pickupForm.state,
+          pincode: pickupForm.pincode,
+        },
+        drop: {
+          name,
+          phone,
+          address_line_1: address,
+          address_line_2: addressLine2,
+          city,
+          state,
+          pincode,
+        },
+        item: {
+          description: items.map((item) => item.name).filter(Boolean).join(", ") || "Item",
+          quantity: items.reduce((sum, item) => sum + Number(item.quantity || 0), 0) || 1,
+          weight_kg: Math.max(0.1, Number(items[0]?.weight || 0) / 1000),
+        },
+      })
+      if (!booking?.data?.success) throw new Error(booking?.data?.message || "Delivery request was not saved")
+
+      const partnerName = selectedChoice.partner === "porter" ? "Porter" : selectedChoice.partner === "delhivery" ? "Delhivery" : "Shadowfax"
+      toast.success(`${partnerName} ${selectedChoice.name} request placed${externalId ? `. Id ${externalId}` : ""}`)
+      setPriceOpen(false)
+      onPlaced()
+    } catch (error) {
+      toast.error(messageOf(error))
+    } finally {
+      setPlacing(false)
+    }
+  }
+
   const mapQuery = [latitude && longitude ? `${latitude},${longitude}` : pincode, warehouse?.latitude && warehouse?.longitude ? `${warehouse.latitude},${warehouse.longitude}` : warehouse?.pincode]
     .filter(Boolean)
     .join("|")
 
   return (
     <>
-      <Dialog open={warehousesReady && warehouses.length === 0}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create a Shadowfax warehouse first</DialogTitle>
-            <DialogDescription>
-              Hyperlocal and quick commerce pick up from a Shadowfax warehouse. Add one with coordinates and a unique code, then come back to request delivery.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button onClick={onCreateWarehouse}>Create warehouse</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <div className="space-y-6">
         <Card>
           <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
             <div>
               <p className="text-sm font-semibold text-primary">{service.title}</p>
-              <CardTitle>{existingOrder ? "Request local delivery" : "Create local delivery"}</CardTitle>
+              <CardTitle>{existingOrder ? `Request ${service.title}` : `Create ${service.title}`}</CardTitle>
               <CardDescription>
-                {service.title}. Hyperlocal sends pickup and drop on each order. Quick commerce sends the warehouse unique code with the full order payload.
+                Pickup, customer, and item details are the same for Hyperlocal and Quick Commerce. Check price at the end.
               </CardDescription>
             </div>
             <Button type="button" variant="outline" onClick={() => void saveOrder()} disabled={saving}>
@@ -885,87 +1225,105 @@ export function LocalShadowfaxPanel({
             </Button>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
+            {initialProduct ? null : (
             <div className="flex gap-2 md:col-span-2">
               <Button type="button" variant={product === "hyperlocal" ? "default" : "outline"} onClick={() => { setProduct("hyperlocal"); setCheckResult(null) }}>
                 Hyperlocal
               </Button>
               <Button type="button" variant={product === "quick_commerce" ? "default" : "outline"} onClick={() => { setProduct("quick_commerce"); setCheckResult(null) }}>
-                Quick commerce
+                Quick Commerce
               </Button>
             </div>
+            )}
 
-            <div className="space-y-2 md:col-span-2">
-              <Label>Shadowfax warehouse</Label>
-              <Select value={warehouse?.id || ""} onValueChange={(value) => { setWarehouseId(value); setCheckResult(null) }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select warehouse" />
-                </SelectTrigger>
-                <SelectContent>
-                  {warehouses.map((entry) => (
-                    <SelectItem key={entry.id} value={entry.id}>
-                      {entry.name} · {entry.unique_code || "No unique code"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {warehouse ? (
-                <p className="text-sm text-muted-foreground">
-                  {pickupAddress || "No address"} · {warehouse.city} {warehouse.pincode || warehouse.pin}
-                  {warehouse.latitude && warehouse.longitude ? ` · ${warehouse.latitude}, ${warehouse.longitude}` : " · coordinates missing"}
-                </p>
-              ) : null}
+            <div className="space-y-3 rounded-md border p-3 md:col-span-2">
+              <p className="flex items-center gap-2 text-sm font-semibold"><MapPin className="size-4 text-primary" /> Pickup</p>
+              <div className="grid gap-4 md:grid-cols-2">
+                <TextField label="Name" value={pickupForm.name} onChange={(value) => setPickupForm((current) => ({ ...current, name: value }))} />
+                <TextField label="Phone" value={pickupForm.phone} onChange={(value) => setPickupForm((current) => ({ ...current, phone: value }))} />
+                <AddressSuggest
+                  label="Address line 1"
+                  value={pickupForm.address}
+                  onText={(value) => {
+                    setPickupLatitude("")
+                    setPickupLongitude("")
+                    setPickupForm((current) => ({ ...current, address: value }))
+                  }}
+                  onPlace={(place) => {
+                    setPickupLatitude(place.latitude)
+                    setPickupLongitude(place.longitude)
+                    setPickupForm((current) => ({
+                      ...current,
+                      address: place.description,
+                      city: place.city || current.city,
+                      state: place.state || current.state,
+                      pincode: place.pincode || current.pincode,
+                    }))
+                  }}
+                />
+                <div className="md:col-span-2">
+                  <TextField label="Address line 2 (flat, house no.)" value={pickupForm.address_line_2} onChange={(value) => setPickupForm((current) => ({ ...current, address_line_2: value }))} />
+                </div>
+                <TextField label="City" value={pickupForm.city} onChange={(value) => setPickupForm((current) => ({ ...current, city: value }))} />
+                <div className="space-y-2">
+                  <Label>State</Label>
+                  <IndianStateSelect value={pickupForm.state} onChange={(value) => setPickupForm((current) => ({ ...current, state: value }))} />
+                </div>
+                <TextField label="Pincode" value={pickupForm.pincode} onChange={(value) => setPickupForm((current) => ({ ...current, pincode: value }))} />
+              </div>
             </div>
 
-            <TextField label="Customer name" value={name} onChange={(value) => { setName(value); setCheckResult(null) }} />
-            <TextField label="Phone" value={phone} onChange={(value) => { setPhone(value); setCheckResult(null) }} />
-            <TextField label="Address line 1" value={address} onChange={(value) => { setAddress(value); setCheckResult(null) }} />
-            <TextField label="Address line 2" value={options.address_line_2} onChange={(value) => setOption("address_line_2", value)} />
-            <TextField label="City" value={city} onChange={(value) => { setCity(value); setCheckResult(null) }} />
-            <div className="space-y-2">
-              <Label>State</Label>
-              <IndianStateSelect value={state} onChange={(value) => { setState(value); setCheckResult(null) }} />
-            </div>
-            <TextField label="Pincode" value={pincode} onChange={(value) => { setPincode(value); setCheckResult(null) }} />
-            <TextField label="Alternate contact" value={options.alternate_contact} onChange={(value) => setOption("alternate_contact", value)} />
-
-            <div className="space-y-2 md:col-span-2">
-              <Label>Drop location</Label>
-              <p className="text-sm text-muted-foreground">
-                {locatingDrop
-                  ? "Finding the drop point from the address and pincode..."
-                  : "The pin is placed from the address and pincode. Click the map or drag the pin if it needs to move."}
-              </p>
-              {latitude && longitude ? (
-                <LocationPinMap
-                  latitude={Number(latitude)}
-                  longitude={Number(longitude)}
-                  onChange={(lat, lng) => {
-                    dropEdited.current = true
-                    setLatitude(String(lat))
-                    setLongitude(String(lng))
+            <div className="space-y-3 rounded-md border p-3 md:col-span-2">
+              <p className="flex items-center gap-2 text-sm font-semibold"><Flag className="size-4" /> Drop</p>
+              <div className="grid gap-4 md:grid-cols-2">
+                <TextField label="Name" value={name} onChange={(value) => { setName(value); setCheckResult(null) }} />
+                <TextField label="Phone" value={phone} onChange={(value) => { setPhone(value); setCheckResult(null) }} />
+                <AddressSuggest
+                  label="Address line 1"
+                  value={address}
+                  onText={(value) => {
+                    setLatitude("")
+                    setLongitude("")
+                    setAddress(value)
+                    setCheckResult(null)
+                  }}
+                  onPlace={(place) => {
+                    setLatitude(place.latitude)
+                    setLongitude(place.longitude)
+                    setAddress(place.description)
+                    if (place.city) setCity(place.city)
+                    if (place.state) setState(place.state)
+                    if (place.pincode) setPincode(place.pincode)
                     setCheckResult(null)
                   }}
                 />
-              ) : (
-                <div className="flex h-40 items-center justify-center rounded-md border text-sm text-muted-foreground">
-                  Enter the address, city, and pincode to place the pin.
+                <div className="md:col-span-2">
+                  <TextField label="Address line 2 (flat, house no.)" value={addressLine2} onChange={setAddressLine2} />
                 </div>
-              )}
+                <TextField label="City" value={city} onChange={(value) => { setCity(value); setCheckResult(null) }} />
+                <div className="space-y-2">
+                  <Label>State</Label>
+                  <IndianStateSelect value={state} onChange={(value) => { setState(value); setCheckResult(null) }} />
+                </div>
+                <TextField label="Pincode" value={pincode} onChange={(value) => { setPincode(value); setCheckResult(null) }} />
+              </div>
             </div>
-            {pickupLatitude && pickupLongitude ? (
+            {routeMap ? (
               <div className="space-y-2 md:col-span-2">
-                <Label>Pickup location</Label>
-                <p className="text-sm text-muted-foreground">
-                  This warehouse has no saved coordinates. The pin is placed from its address. Drag it if the pickup point is wrong.
-                </p>
-                <LocationPinMap
-                  latitude={Number(pickupLatitude)}
-                  longitude={Number(pickupLongitude)}
-                  onChange={(lat, lng) => {
-                    setPickupLatitude(String(lat))
-                    setPickupLongitude(String(lng))
-                    setCheckResult(null)
-                  }}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold">Pickup to drop</p>
+                  <p className="text-sm text-muted-foreground">
+                    {routeInfo.distanceText
+                      ? `${routeInfo.distanceText}${routeInfo.durationText ? ` · ${routeInfo.durationText}` : ""}`
+                      : "Calculating distance..."}
+                  </p>
+                </div>
+                <iframe
+                  title="Pickup to drop"
+                  className="h-72 w-full rounded-md border"
+                  src={routeMap}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
                 />
               </div>
             ) : null}
@@ -999,27 +1357,10 @@ export function LocalShadowfaxPanel({
                   <TextField label="Name" value={item.name} onChange={(value) => setItem(index, { name: value })} />
                   <TextField label="Price" value={item.price} onChange={(value) => setItem(index, { price: value })} type="number" />
                   <TextField label="Quantity" value={item.quantity} onChange={(value) => setItem(index, { quantity: value })} type="number" />
-                  {product === "quick_commerce" ? (
-                    <>
-                      <TextField label="SKU id" value={item.sku_id} onChange={(value) => setItem(index, { sku_id: value })} />
-                      <TextField label="HSN code" value={item.hsn_code} onChange={(value) => setItem(index, { hsn_code: value })} />
-                      <TextField label="Invoice number" value={item.invoice_no} onChange={(value) => setItem(index, { invoice_no: value })} />
-                      <TextField label="Category" value={item.category} onChange={(value) => setItem(index, { category: value })} />
-                      <TextField label="Seller name" value={item.seller_name} onChange={(value) => setItem(index, { seller_name: value })} />
-                      <TextField label="Seller address" value={item.seller_address} onChange={(value) => setItem(index, { seller_address: value })} />
-                      <div className="space-y-2">
-                        <Label>Seller state</Label>
-                        <IndianStateSelect value={item.seller_state} onChange={(value) => setItem(index, { seller_state: value })} />
-                      </div>
-                      <TextField label="Seller GSTIN" value={item.seller_gstin} onChange={(value) => setItem(index, { seller_gstin: value })} />
-                      <TextField label="CGST" value={item.cgst} onChange={(value) => setItem(index, { cgst: value })} type="number" />
-                      <TextField label="SGST" value={item.sgst} onChange={(value) => setItem(index, { sgst: value })} type="number" />
-                      <TextField label="IGST" value={item.igst} onChange={(value) => setItem(index, { igst: value })} type="number" />
-                      <TextField label="Total tax" value={item.total_tax} onChange={(value) => setItem(index, { total_tax: value })} type="number" />
-                      <CheckField label="Requires extra care" checked={item.requires_extra_care} onChange={(value) => setItem(index, { requires_extra_care: value })} />
-                      <TextField label="Extra care type" value={item.type_extra_care} onChange={(value) => setItem(index, { type_extra_care: value })} />
-                    </>
-                  ) : null}
+                  <TextField label="Weight (grams)" value={item.weight} onChange={(value) => setItem(index, { weight: value })} type="number" />
+                  <TextField label="Length (cm)" value={item.length} onChange={(value) => setItem(index, { length: value })} type="number" />
+                  <TextField label="Breadth (cm)" value={item.breadth} onChange={(value) => setItem(index, { breadth: value })} type="number" />
+                  <TextField label="Height (cm)" value={item.height} onChange={(value) => setItem(index, { height: value })} type="number" />
                   {items.length > 1 ? (
                     <div className="md:col-span-3">
                       <Button type="button" variant="outline" size="sm" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
@@ -1047,17 +1388,17 @@ export function LocalShadowfaxPanel({
                 </Select>
               </div>
               <TextField label="Client surge" value={options.client_surge} onChange={(value) => setOption("client_surge", value)} type="number" />
-              <TextField label="Actual weight" value={options.actual_weight} onChange={(value) => setOption("actual_weight", value)} type="number" />
-              <TextField label="Volumetric weight" value={options.volumetric_weight} onChange={(value) => setOption("volumetric_weight", value)} type="number" />
-              <TextField label="Order service" value={options.order_service} onChange={(value) => setOption("order_service", value)} />
-              <TextField label="E-way bill" value={options.eway_bill} onChange={(value) => setOption("eway_bill", value)} />
-              <TextField label="GSTIN" value={options.gstin_number} onChange={(value) => setOption("gstin_number", value)} />
               <TextField label="Geofence radius (meters)" value={options.geofence_radius} onChange={(value) => setOption("geofence_radius", value)} type="number" />
               <CheckField label="Rain flag" checked={options.rain_flag} onChange={(value) => setOption("rain_flag", value)} />
               <CheckField label="Allow undelivered" checked={options.allow_undelivered} onChange={(value) => setOption("allow_undelivered", value)} />
               <CheckField label="Eligible for return to seller" checked={options.rts} onChange={(value) => setOption("rts", value)} />
               <CheckField label="Add rider tip" checked={options.has_tip} onChange={(value) => setOption("has_tip", value)} />
               <TextField label="Tip amount" value={options.tip_amount} onChange={(value) => setOption("tip_amount", value)} type="number" />
+              <TextField label="Actual weight" value={options.actual_weight} onChange={(value) => setOption("actual_weight", value)} type="number" />
+              <TextField label="Volumetric weight" value={options.volumetric_weight} onChange={(value) => setOption("volumetric_weight", value)} type="number" />
+              <TextField label="Order service" value={options.order_service} onChange={(value) => setOption("order_service", value)} />
+              <TextField label="E-way bill" value={options.eway_bill} onChange={(value) => setOption("eway_bill", value)} />
+              <TextField label="GSTIN" value={options.gstin_number} onChange={(value) => setOption("gstin_number", value)} />
             </OptionGroup>
 
             <OptionGroup title="OTPs">
@@ -1099,12 +1440,91 @@ export function LocalShadowfaxPanel({
             </OptionGroup>
 
             <div className="md:col-span-2">
-              <Button onClick={() => void checkPrice()} disabled={checking || !warehouse}>
-                {checking ? "Checking..." : product === "hyperlocal" ? "Check serviceability" : "Validate quick commerce order"}
+              <Button type="button" onClick={() => void showAppPrices()} disabled={checking}>
+                {checking ? "Checking price..." : "Check price"}
               </Button>
             </div>
           </CardContent>
         </Card>
+
+        <Dialog open={priceOpen} onOpenChange={setPriceOpen}>
+          <DialogContent className="flex max-h-[calc(100vh-1.5rem)] w-[min(1280px,calc(100%-1rem))] max-w-none flex-col gap-0 overflow-y-auto p-0 sm:max-w-none">
+            <div className="grid shrink-0 grid-cols-1 border-b md:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="h-full min-h-[460px] bg-muted">
+                {routeMap ? (
+                  <iframe title="Pickup to drop" className="h-full min-h-[460px] w-full" src={routeMap} referrerPolicy="no-referrer-when-downgrade" />
+                ) : null}
+              </div>
+              <div className="flex flex-col gap-2 border-l p-3">
+                <Card className="gap-0 py-2 shadow-none">
+                  <CardHeader className="gap-0.5 px-3">
+                    <CardDescription>Distance</CardDescription>
+                    <CardTitle className="text-xl">{routeInfo.distanceText || "—"}</CardTitle>
+                    <CardDescription>{routeInfo.durationText || "Pickup to drop"}</CardDescription>
+                  </CardHeader>
+                </Card>
+                <Card className="gap-0 py-2 shadow-none">
+                  <CardHeader className="gap-0.5 px-3">
+                    <CardDescription className="flex items-center gap-1.5"><MapPin className="size-3.5 text-primary" /> Pickup</CardDescription>
+                    <CardTitle className="text-sm leading-5">{[pickupForm.address, pickupForm.city, pickupForm.state, pickupForm.pincode].filter(Boolean).join(", ") || "—"}</CardTitle>
+                    <CardDescription>{[pickupForm.name, pickupForm.phone].filter(Boolean).join(" · ")}</CardDescription>
+                  </CardHeader>
+                </Card>
+                <Card className="gap-0 py-2 shadow-none">
+                  <CardHeader className="gap-0.5 px-3">
+                    <CardDescription className="flex items-center gap-1.5"><Flag className="size-3.5" /> Drop</CardDescription>
+                    <CardTitle className="text-sm leading-5">{[address, city, state, pincode].filter(Boolean).join(", ") || "—"}</CardTitle>
+                    <CardDescription>{[name, phone].filter(Boolean).join(" · ")}</CardDescription>
+                  </CardHeader>
+                </Card>
+              </div>
+            </div>
+            <div className="grid shrink-0 gap-4 p-4 lg:grid-cols-2">
+                {["delhivery", "shadowfax", "porter"].filter((app) => vehicleChoices.some((choice) => choice.partner === app)).map((app) => (
+                  <Card key={app} className="gap-4 py-4">
+                    <CardHeader className="px-4">
+                      <PartnerLogo partner={app} size="lg" className="gap-3" imgClassName="h-14 w-48 bg-transparent object-cover object-center" textClassName="text-xl font-semibold" />
+                    </CardHeader>
+                    <CardContent className="px-4">
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {vehicleChoices.filter((choice) => choice.partner === app).map((choice) => {
+                          const selected = selectedChoice?.partner === choice.partner && selectedChoice.name === choice.name
+                          return (
+                            <Button
+                              key={`${app}-${choice.name}`}
+                              type="button"
+                              variant={selected ? "default" : "outline"}
+                              className="h-auto flex-col gap-1.5 px-2 py-3 whitespace-normal"
+                              onClick={() => setSelectedChoice(choice)}
+                            >
+                              <VehicleLogo name={choice.name} className={cn("size-8 border-0", selected ? "bg-primary-foreground text-primary" : "bg-muted")} />
+                              <span className="text-xs font-medium">{choice.name}</span>
+                              {choice.slabKm ? <span className={cn("text-[10px] leading-none", selected ? "text-primary-foreground/80" : "text-muted-foreground")}>Up to {choice.slabKm} km</span> : null}
+                              <Badge variant={selected ? "secondary" : "outline"}>{choice.price ? formatINR(choice.price) : "—"}</Badge>
+                            </Button>
+                          )
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            <Separator />
+            <div className="flex shrink-0 items-center justify-between gap-4 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Selected vehicle</p>
+                <p className="truncate text-sm font-semibold">
+                  {selectedChoice
+                    ? `${selectedChoice.partner === "porter" ? "Porter" : selectedChoice.partner === "delhivery" ? "Delhivery" : "Shadowfax"} · ${selectedChoice.name} · ${formatINR(selectedChoice.price)}`
+                    : "Choose a vehicle from the cards above"}
+                </p>
+              </div>
+              <Button type="button" disabled={!selectedChoice || placing} onClick={() => void placeSelected()}>
+                {placing ? "Placing order..." : "Place order"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {checkResult ? (
           <Card>
@@ -1150,7 +1570,12 @@ export function LocalShadowfaxPanel({
               >
                 {placing ? "Placing request..." : "Place delivery request"}
               </Button>
-              {placedSummary ? <p className="text-sm">Shadowfax id: {placedSummary}</p> : null}
+              {placedSummary ? (
+                <div className="flex items-center gap-1.5 text-sm">
+                  <PartnerLogo partner="shadowfax" size="xs" showName={false} />
+                  <span>Shadowfax id: {placedSummary}</span>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         ) : null}

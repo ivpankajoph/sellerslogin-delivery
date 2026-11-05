@@ -34,6 +34,7 @@ import {
 } from '@/features/delivery-system/lib/api'
 import type { CourierOrderSummary } from '@/features/delivery-system/lib/data'
 import { formatINR } from '@/lib/currency'
+import { PartnerLogo } from '@/components/shared/partner-logo'
 import type { RootState } from '@/store'
 
 const readText = (value: unknown) => String(value ?? '').trim()
@@ -431,7 +432,10 @@ export function CourierTrackingPage() {
       <div className='space-y-5'>
         <div className='flex flex-wrap items-center justify-between gap-3 rounded-md border bg-card p-4'>
           <div>
-            <h1 className='text-xl font-semibold'>Delhivery Tracking</h1>
+            <h1 className='flex items-center gap-2 text-xl font-semibold'>
+              <PartnerLogo partner="delhivery" size="sm" showName={false} />
+              Delhivery Tracking
+            </h1>
             <p className='text-sm text-muted-foreground'>Live shipment status and scan timeline.</p>
           </div>
           <div className='flex gap-2'>
@@ -506,7 +510,7 @@ export function CourierTrackingPage() {
                         <Truck className='mt-0.5 h-5 w-5 text-foreground' />
                         <div>
                           <p className='font-semibold'>Pickup is scheduled.</p>
-                          <p className='mt-1 text-sm text-emerald-800'>
+                          <p className='mt-1 text-sm font-medium text-primary'>
                             Delhivery has already scheduled a pickup for this shipment. Please print the shipping label and securely attach it to the parcel before the pickup executive arrives.
                           </p>
                         </div>

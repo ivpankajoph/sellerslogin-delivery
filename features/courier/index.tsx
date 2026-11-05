@@ -46,6 +46,7 @@ import {
   type CourierPartnerId,
 } from '@/features/delivery-system/lib/data'
 import { formatINR } from '@/lib/currency'
+import { PartnerLogo } from '@/components/shared/partner-logo'
 import type { RootState } from '@/store'
 
 type CheckResult = {
@@ -200,7 +201,7 @@ const buildShadowfaxPickupPayload = (warehouse: ShadowfaxWarehouse) => ({
 
 const badgeTone = (state: CheckResult['state']) =>
   state === 'ok'
-    ? { label: 'Available', className: 'border-emerald-500/20 bg-muted0/10 text-foreground dark:text-emerald-200', Icon: CheckCircle2 }
+    ? { label: 'Available', className: 'border-primary/20 bg-primary/10 text-primary dark:text-primary', Icon: CheckCircle2 }
     : state === 'bad'
       ? { label: 'Unavailable', className: 'border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-200', Icon: XCircle }
       : state === 'warn'
@@ -982,9 +983,9 @@ export function CourierDeskPage() {
                     <div key={item.id} className='rounded-3xl border border-border bg-card p-5 shadow-sm'>
                       <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
                         <div className='flex items-start gap-4'>
-                          <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl border bg-background shadow-sm ${partner.themeClass}`}>
+                          <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border bg-background p-1.5 shadow-sm ${partner.themeClass}`}>
                             {partner.imageSrc ? (
-                              <img src={partner.imageSrc} alt={partner.title} className='max-h-10 max-w-11 object-contain' />
+                              <img src={partner.imageSrc} alt={partner.title} className='h-full w-full object-contain rounded-xl' />
                             ) : (
                               <span className='text-sm font-semibold text-foreground'>
                                 {partner.shortLabel.slice(0, 2).toUpperCase()}
@@ -992,7 +993,10 @@ export function CourierDeskPage() {
                             )}
                           </div>
                           <div>
-                            <p className='text-xl font-semibold text-foreground'>{item.title}</p>
+                            <div className='flex items-center gap-2'>
+                              <PartnerLogo partner={item.id} size="sm" showName={false} />
+                              <p className='text-xl font-semibold text-foreground'>{item.title}</p>
+                            </div>
                             <p className='mt-1 text-2xl font-bold text-foreground'>{item.priceLabel}</p>
                           </div>
                         </div>
@@ -1045,7 +1049,7 @@ export function CourierDeskPage() {
                                   {addingWarehouseFor === item.id ? (
                                     <LoaderCircle className='h-4 w-4 animate-spin' />
                                   ) : (
-                                    <ArrowUpRight className='h-4 w-4' />
+                                    <PartnerLogo partner={item.id} size="xs" showName={false} />
                                   )}
                                   Add warehouse to {partner.title}
                                 </Button>
@@ -1094,7 +1098,10 @@ export function CourierDeskPage() {
                 <div className='flex items-center justify-between gap-3'>
                   <div>
                     <p className='text-sm text-muted-foreground'>Delivery app</p>
-                    <p className='text-xl font-semibold text-foreground'>{confirmRequest.title}</p>
+                    <div className='mt-1 flex items-center gap-2'>
+                      <PartnerLogo partner={confirmRequest.id} size="sm" showName={false} />
+                      <p className='text-xl font-semibold text-foreground'>{confirmRequest.title}</p>
+                    </div>
                   </div>
                   <div className='text-right'>
                     <p className='text-sm text-muted-foreground'>Price</p>
