@@ -775,14 +775,14 @@ export function DeliveryWorkspaceShell({
       }
     >
       <Dialog open={createRequestOpen} onOpenChange={setCreateRequestOpen}>
-        <DialogContent className='sm:max-w-3xl'>
+        <DialogContent className='max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] overflow-y-auto p-4 sm:max-h-[calc(100dvh-2rem)] sm:w-full sm:max-w-4xl sm:p-6'>
           <DialogHeader>
             <DialogTitle>Create Delivery Request</DialogTitle>
             <DialogDescription>
               Choose a delivery type. The matching request page opens next.
             </DialogDescription>
           </DialogHeader>
-          <div className='grid gap-4 sm:grid-cols-2'>
+          <div className='grid gap-3 sm:gap-4 md:grid-cols-2'>
             {deliveryServices.map((service) => {
               const Icon = service.icon
               return (
@@ -793,7 +793,7 @@ export function DeliveryWorkspaceShell({
                     setCreateRequestOpen(false)
                     openPath(createDeliveryPath(service))
                   }}
-                  className='flex h-full flex-col rounded-xl border bg-card p-5 text-left shadow-sm transition hover:bg-muted/40'
+                  className='flex h-full min-w-0 flex-col rounded-xl border bg-card p-4 text-left shadow-sm transition hover:bg-muted/40 sm:p-5'
                 >
                   <Icon className='size-5 text-primary' />
                   <span className='mt-4 text-sm font-semibold text-primary'>{service.badge}</span>
