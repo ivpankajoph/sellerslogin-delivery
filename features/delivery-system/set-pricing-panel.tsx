@@ -366,9 +366,9 @@ export function SetPricingPanel() {
         <Card className='overflow-hidden'>
           <div className='flex items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3'>
             <div role='group' aria-label='Pricing table view' className='relative inline-grid grid-cols-2 rounded-md bg-muted p-1'>
-              <span aria-hidden='true' className={`absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded bg-background shadow-sm ring-1 ring-border/60 transition-transform duration-200 ease-out ${pricingView === 'rules' ? 'translate-x-full' : 'translate-x-0'}`} />
-              <Button type='button' variant='ghost' aria-pressed={pricingView === 'base'} onClick={() => setPricingView('base')} className='relative z-10 h-8 px-4'>Base pricing</Button>
-              <Button type='button' variant='ghost' aria-pressed={pricingView === 'rules'} onClick={() => setPricingView('rules')} className='relative z-10 h-8 px-4'>Scheduled rules <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums'>{visibleRules.length}</span></Button>
+              <span aria-hidden='true' className='absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] translate-x-0 rounded bg-background shadow-sm ring-1 ring-border/60 transition-transform duration-200 ease-out' />
+              <Button type='button' variant='ghost' aria-pressed={true} onClick={() => setPricingView('base')} className='relative z-10 h-8 px-4'>Base pricing</Button>
+              <Button type='button' variant='ghost' aria-pressed={false} onClick={() => setPricingView('rules')} className='relative z-10 h-8 px-4'>Scheduled rules <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums'>{visibleRules.length}</span></Button>
             </div>
             <span className='text-xs text-muted-foreground'>{visiblePartners.length} {visiblePartners.length === 1 ? 'partner' : 'partners'}</span>
           </div>
@@ -395,9 +395,9 @@ export function SetPricingPanel() {
         <Card className='overflow-hidden'>
           <div className='flex items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3'>
             <div role='group' aria-label='Pricing table view' className='relative inline-grid grid-cols-2 rounded-md bg-muted p-1'>
-              <span aria-hidden='true' className={`absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded bg-background shadow-sm ring-1 ring-border/60 transition-transform duration-200 ease-out ${pricingView === 'rules' ? 'translate-x-full' : 'translate-x-0'}`} />
-              <Button type='button' variant='ghost' aria-pressed={pricingView === 'base'} onClick={() => setPricingView('base')} className='relative z-10 h-8 px-4'>Base pricing</Button>
-              <Button type='button' variant='ghost' aria-pressed={pricingView === 'rules'} onClick={() => setPricingView('rules')} className='relative z-10 h-8 px-4'>Scheduled rules <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums'>{visibleRules.length}</span></Button>
+              <span aria-hidden='true' className='absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] translate-x-full rounded bg-background shadow-sm ring-1 ring-border/60 transition-transform duration-200 ease-out' />
+              <Button type='button' variant='ghost' aria-pressed={false} onClick={() => setPricingView('base')} className='relative z-10 h-8 px-4'>Base pricing</Button>
+              <Button type='button' variant='ghost' aria-pressed={true} onClick={() => setPricingView('rules')} className='relative z-10 h-8 px-4'>Scheduled rules <span className='ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums'>{visibleRules.length}</span></Button>
             </div>
             <span className='text-xs text-muted-foreground'>{visibleRules.length} {visibleRules.length === 1 ? 'rule' : 'rules'}</span>
           </div>
