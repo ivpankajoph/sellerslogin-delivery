@@ -7,6 +7,7 @@ import { DeliveryWorkspaceShell } from "@/features/delivery-system";
 import type { RootState } from "@/store";
 
 function deliverySection(pathname: string) {
+  if (pathname.startsWith("/velocity")) return "velocity";
   if (pathname.startsWith("/courier/list")) return "courier-list";
   if (pathname.startsWith("/courier/manual-list")) return "manual-list";
   if (pathname.startsWith("/courier/manual")) return "manual";

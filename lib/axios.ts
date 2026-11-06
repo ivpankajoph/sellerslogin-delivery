@@ -33,6 +33,7 @@ const EXCLUDED_TOP_LEVEL_PATHS = new Set([
   "/integrations",
   "/vendor",
   "/admin",
+  "/velocity",
 ]);
 
 const api: AxiosInstance = axios.create({

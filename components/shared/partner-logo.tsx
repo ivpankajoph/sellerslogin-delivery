@@ -31,6 +31,11 @@ export const PARTNER_META: Record<string, { id: string; name: string; logo: stri
     name: "Porter",
     logo: "/porter.png",
   },
+  velocity: {
+    id: "velocity",
+    name: "Velocity Shipping",
+    logo: "/velocity-shipping.svg",
+  },
 }
 
 export function resolvePartnerInfo(raw?: string | null) {
@@ -39,6 +44,7 @@ export function resolvePartnerInfo(raw?: string | null) {
   if (lower.includes("delhivery")) return PARTNER_META.delhivery
   if (lower.includes("shadowfax")) return PARTNER_META.shadowfax
   if (lower.includes("porter")) return PARTNER_META.porter
+  if (lower.includes("velocity")) return PARTNER_META.velocity
   return null
 }
 

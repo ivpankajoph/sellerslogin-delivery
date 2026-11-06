@@ -852,6 +852,7 @@ export function LocalShadowfaxPanel({
           partner: app,
           city: pickupForm.city || city,
           service_id: "local",
+          request_type: product === "quick_commerce" ? "quick-commerce" : "hyperlocal",
           distance_km: distanceKm,
           allowed_vehicles: allowed,
           pickup: locatedPickup,
@@ -905,6 +906,7 @@ export function LocalShadowfaxPanel({
           const applied = await api.post("/delivery-pricing/apply", {
             partner_id: "shadowfax",
             service_id: "local",
+            request_type: "hyperlocal",
             actual_price: baseDeliveryCost,
           })
           const adjusted = Number(applied?.data?.data?.price)

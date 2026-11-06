@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from '@/lib/router'
 import type { RootState } from '@/store'
 import {
@@ -18,6 +18,7 @@ import {
   ChevronDown,
   Truck,
   Warehouse,
+  Gauge,
   Wallet as WalletIcon,
   Package,
   Zap,
@@ -77,6 +78,7 @@ import { DeliveryMarkupPanel } from './delivery-markup-panel'
 import { SetPricingPanel } from './set-pricing-panel'
 import { DeliverySupportPanel } from './delivery-support-panel'
 import { PartnerLogo } from '@/components/shared/partner-logo'
+import { velocityNavigationGroups } from '@/features/velocity/navigation'
 
 type DeliveryView =
   | 'dashboard'
@@ -111,6 +113,7 @@ type DeliveryWorkspaceSection =
   | 'manual-orders'
   | 'create-order'
   | 'services'
+  | 'velocity'
 
 const readText = (value: unknown) => String(value ?? '').trim()
 
@@ -458,6 +461,7 @@ export function DeliveryWorkspaceShell({
       activeSection === 'manual-orders' ||
       activeSection === 'create-order'
   )
+  const [velocityOpen, setVelocityOpen] = useState(activeSection === 'velocity')
 
   const fetchWallet = async () => {
     try {
@@ -500,6 +504,10 @@ export function DeliveryWorkspaceShell({
     if (ordersGroupActive) setOrdersOpen(true)
   }, [ordersGroupActive])
 
+  useEffect(() => {
+    if (activeSection === 'velocity') setVelocityOpen(true)
+  }, [activeSection])
+
   const openCreateOrder = (serviceId = 'd2c') => {
     openPath(`/delivery-system?view=create-order&service=${serviceId}`)
   }
@@ -531,6 +539,57 @@ export function DeliveryWorkspaceShell({
       sidebar={
         <>
           <SidebarMenu>
+                <Collapsible
+                  open={velocityOpen}
+                  onOpenChange={setVelocityOpen}
+                  className='group/velocity'
+                >
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
+                        isActive={activeSection === 'velocity'}
+                        tooltip='Velocity Shipping'
+                        className='h-10 cursor-pointer text-sm hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+                      >
+                        <Gauge />
+                        <span>Velocity Shipping</span>
+                        <span className='ml-auto rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white'>API</span>
+                        <ChevronDown className='size-4 transition-transform group-data-[state=open]/velocity:rotate-180' />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub className='mt-1 ml-3 border-l border-border pl-2'>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            isActive={location.pathname === '/velocity'}
+                            onClick={() => openPath('/velocity')}
+                            className='h-9 w-full cursor-pointer text-sm hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+                          >
+                            <LayoutDashboard />
+                            <span>Overview</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        {velocityNavigationGroups.map((group) => (
+                          <Fragment key={group.category}>
+                            <SidebarMenuSubItem className='px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground'>{group.category}</SidebarMenuSubItem>
+                            {group.items.map((item) => (
+                              <SidebarMenuSubItem key={item.id}>
+                                <SidebarMenuSubButton
+                                  isActive={location.pathname === `/velocity/${item.id}`}
+                                  onClick={() => openPath(`/velocity/${item.id}`)}
+                                  className='h-8 w-full cursor-pointer text-xs hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
+                                >
+                                  <span className='truncate'>{item.label}</span>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            ))}
+                          </Fragment>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     isActive={activeSection === 'dashboard'}

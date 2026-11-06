@@ -252,6 +252,7 @@ function ParcelCreateOrderPanel({
           const response = await api.post("/delivery-pricing/apply", {
             partner_id: partner,
             service_id: service.id,
+            request_type: service.product === 'quick_commerce' ? 'quick-commerce' : service.product === 'hyperlocal' ? 'hyperlocal' : undefined,
             actual_price: actual,
           })
           const price = Number(response?.data?.data?.price)
@@ -303,6 +304,7 @@ function ParcelCreateOrderPanel({
           partner: "shadowfax",
           city: form.city,
           service_id: service.id,
+          request_type: service.product === 'quick_commerce' ? 'quick-commerce' : service.product === 'hyperlocal' ? 'hyperlocal' : undefined,
           allowed_vehicles: allowedVehiclesFor("shadowfax"),
           distance_km: Number(estimateData?.distance_km || 0),
           pickup: {
@@ -389,6 +391,7 @@ function ParcelCreateOrderPanel({
         .post("/delivery-pricing/porter-quote", {
           city: form.city,
           service_id: service.id,
+          request_type: service.product === 'quick_commerce' ? 'quick-commerce' : service.product === 'hyperlocal' ? 'hyperlocal' : undefined,
           allowed_vehicles: allowedVehiclesFor("porter"),
           distance_km: Number(estimateData?.distance_km || 0),
           pickup: {
