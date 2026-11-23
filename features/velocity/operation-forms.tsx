@@ -27,6 +27,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { CourierLogo } from "./courier-logo"
 import { runVelocityOperation, type VelocityOperation } from "./lib/api"
 
 type FormValue = string
@@ -308,21 +309,77 @@ const displayValue = (value: unknown) => {
   return String(value)
 }
 
+const asRecord = (value: unknown) =>
+  value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null
+
+const formatDate = (value: unknown) => {
+  const text = String(value || "")
+  const parsed = new Date(text.length === 10 ? `${text}T00:00:00` : text)
+  if (Number.isNaN(parsed.getTime())) return text || ""
+  return parsed.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+}
+
+const formatZone = (value: unknown) => String(value || "").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+
+type CourierCard = {
+  key: string
+  name: string
+  code?: string
+  date: string
+  price?: number
+}
+
+const courierCards = (summary: Record<string, unknown>) => {
+  const source = [summary.serviceability_results, summary.serviceable_couriers].find(Array.isArray) as unknown[] | undefined
+  if (!source) return []
+  return source.flatMap((entry, index): CourierCard[] => {
+    const row = asRecord(entry)
+    if (!row) return []
+    const name = String(row.carrier_name || row.courier_name || "Courier")
+    const delivery = asRecord(asRecord(row.expected_delivery)?.delivery)
+    const charges = asRecord(row.charges)
+    const price = Number(charges?.total_forward_charges ?? charges?.forward_freight_charges)
+    return [{
+      key: String(row.carrier_id || row.courier_company_id || index),
+      name,
+      code: row.carrier_code ? String(row.carrier_code) : undefined,
+      date: delivery?.human_readable ? String(delivery.human_readable) : formatDate(row.expected_delivery_date),
+      price: Number.isFinite(price) ? price : undefined,
+    }]
+  })
+}
+
 function ResponsePanel({ response }: { response: unknown }) {
   if (!response || typeof response !== "object") return null
   const object = response as Record<string, unknown>
-  const summary = (object.result || object.payload || object.data || object) as Record<string, unknown>
-  const entries = summary && typeof summary === "object" && !Array.isArray(summary)
-    ? Object.entries(summary).slice(0, 8)
+  const summary = asRecord(object.result || object.payload || object.data) || asRecord(object)
+  const couriers = summary ? courierCards(summary) : []
+  const hidden = new Set(["serviceability_results", "serviceable_couriers"])
+  const entries = summary
+    ? Object.entries(summary).filter(([key, value]) => !hidden.has(key) && (typeof value !== "object" || value === null)).slice(0, 6)
     : []
   return (
     <Card className="border-emerald-200 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/10">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2"><CheckCircle2 className="size-5 text-emerald-600" /><CardTitle className="text-base">Velocity response</CardTitle></div>
-        <CardDescription>The request completed successfully.</CardDescription>
+        <CardDescription>{couriers.length ? `${couriers.length} courier${couriers.length === 1 ? "" : "s"} can deliver this lane.` : "The request completed successfully."}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        {entries.length ? <div className="grid gap-2 sm:grid-cols-2">{entries.map(([key, value]) => <div key={key} className="min-w-0 rounded-lg border bg-background p-3"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{key.replaceAll("_", " ")}</p><p className="mt-1 truncate text-sm font-medium" title={displayValue(value)}>{displayValue(value)}</p></div>)}</div> : null}
+        {couriers.length ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {couriers.map((courier) => (
+              <div key={courier.key} className="flex items-center gap-3 rounded-xl border bg-background p-3">
+                <CourierLogo name={`${courier.name} ${courier.code || ""}`} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{courier.name}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{courier.date ? `Delivery ${courier.date}` : "Delivery date unavailable"}</p>
+                </div>
+                {courier.price !== undefined ? <p className="text-sm font-semibold">₹{courier.price}</p> : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {entries.length ? <div className="grid gap-2 sm:grid-cols-2">{entries.map(([key, value]) => <div key={key} className="min-w-0 rounded-lg border bg-background p-3"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{key.replaceAll("_", " ")}</p><p className="mt-1 truncate text-sm font-medium">{key === "zone" ? formatZone(value) : displayValue(value)}</p></div>)}</div> : null}
         <details className="rounded-lg border bg-background p-3"><summary className="cursor-pointer text-sm font-medium">View complete API response</summary><pre className="mt-3 max-h-72 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">{JSON.stringify(response, null, 2)}</pre></details>
       </CardContent>
     </Card>
