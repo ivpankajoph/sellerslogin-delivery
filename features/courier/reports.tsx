@@ -159,7 +159,6 @@ export function CourierReportsPage() {
                 <div className='mt-4 grid gap-3'>
                   {[
                     ['Requests', '/delivery-system?view=website-requests'],
-                    ['Check Price', '/courier'],
                     ['Warehouses', '/courier/warehouses'],
                   ].map(([label, href]) => (
                     <button

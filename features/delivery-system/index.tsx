@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from '@/lib/router'
 import type { RootState } from '@/store'
 import {
@@ -18,7 +18,6 @@ import {
   ChevronDown,
   Truck,
   Warehouse,
-  Gauge,
   Wallet as WalletIcon,
   Package,
   Zap,
@@ -78,7 +77,6 @@ import { DeliveryMarkupPanel } from './delivery-markup-panel'
 import { SetPricingPanel } from './set-pricing-panel'
 import { DeliverySupportPanel } from './delivery-support-panel'
 import { PartnerLogo } from '@/components/shared/partner-logo'
-import { velocityNavigationGroups } from '@/features/velocity/navigation'
 
 type DeliveryView =
   | 'dashboard'
@@ -194,7 +192,7 @@ const D2C_DELIVERY_SERVICE: DeliveryService = {
   bestFor: 'Ecommerce, clothing, cosmetics, gifts',
   icon: Package,
   accent: 'bg-blue-600 text-white',
-  partners: ['delhivery', 'shadowfax'],
+  partners: ['delhivery', 'shadowfax', 'porter', 'velocity'],
   modes: [
     { title: 'Express Delivery', description: 'Fastest delivery by Air.' },
     {
@@ -446,7 +444,7 @@ export function DeliveryWorkspaceShell({
   const isAdmin = role === 'admin' || role === 'superadmin'
   const { config: appConfig } = useDeliveryAppConfig()
   const deliveryServices = useMemo(
-    () => DELIVERY_SERVICE_CATALOG.map((service) => applyDeliveryApps(service, appConfig)),
+    () => [D2C_DELIVERY_SERVICE, ...DELIVERY_SERVICE_CATALOG].map((service) => applyDeliveryApps(service, appConfig)),
     [appConfig]
   )
 
@@ -461,7 +459,6 @@ export function DeliveryWorkspaceShell({
       activeSection === 'manual-orders' ||
       activeSection === 'create-order'
   )
-  const [velocityOpen, setVelocityOpen] = useState(activeSection === 'velocity')
 
   const fetchWallet = async () => {
     try {
@@ -504,10 +501,6 @@ export function DeliveryWorkspaceShell({
     if (ordersGroupActive) setOrdersOpen(true)
   }, [ordersGroupActive])
 
-  useEffect(() => {
-    if (activeSection === 'velocity') setVelocityOpen(true)
-  }, [activeSection])
-
   const openCreateOrder = (serviceId = 'd2c') => {
     openPath(`/delivery-system?view=create-order&service=${serviceId}`)
   }
@@ -539,57 +532,6 @@ export function DeliveryWorkspaceShell({
       sidebar={
         <>
           <SidebarMenu>
-                <Collapsible
-                  open={velocityOpen}
-                  onOpenChange={setVelocityOpen}
-                  className='group/velocity'
-                >
-                  <SidebarMenuItem>
-                    <CollapsibleTrigger asChild>
-                      <SidebarMenuButton
-                        isActive={activeSection === 'velocity'}
-                        tooltip='Velocity Shipping'
-                        className='h-10 cursor-pointer text-sm hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
-                      >
-                        <Gauge />
-                        <span>Velocity Shipping</span>
-                        <span className='ml-auto rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white'>API</span>
-                        <ChevronDown className='size-4 transition-transform group-data-[state=open]/velocity:rotate-180' />
-                      </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <SidebarMenuSub className='mt-1 ml-3 border-l border-border pl-2'>
-                        <SidebarMenuSubItem>
-                          <SidebarMenuSubButton
-                            isActive={location.pathname === '/velocity'}
-                            onClick={() => openPath('/velocity')}
-                            className='h-9 w-full cursor-pointer text-sm hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
-                          >
-                            <LayoutDashboard />
-                            <span>Overview</span>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                        {velocityNavigationGroups.map((group) => (
-                          <Fragment key={group.category}>
-                            <SidebarMenuSubItem className='px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground'>{group.category}</SidebarMenuSubItem>
-                            {group.items.map((item) => (
-                              <SidebarMenuSubItem key={item.id}>
-                                <SidebarMenuSubButton
-                                  isActive={location.pathname === `/velocity/${item.id}`}
-                                  onClick={() => openPath(`/velocity/${item.id}`)}
-                                  className='h-8 w-full cursor-pointer text-xs hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
-                                >
-                                  <span className='truncate'>{item.label}</span>
-                                </SidebarMenuSubButton>
-                              </SidebarMenuSubItem>
-                            ))}
-                          </Fragment>
-                        ))}
-                      </SidebarMenuSub>
-                    </CollapsibleContent>
-                  </SidebarMenuItem>
-                </Collapsible>
-
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     isActive={activeSection === 'dashboard'}
@@ -658,7 +600,7 @@ export function DeliveryWorkspaceShell({
                             <span>Website requests</span>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
-                        {DELIVERY_SERVICE_CATALOG.map((service) => (
+                        {[D2C_DELIVERY_SERVICE, ...DELIVERY_SERVICE_CATALOG].map((service) => (
                           <SidebarMenuSubItem key={service.key}>
                             <SidebarMenuSubButton
                               isActive={
@@ -733,20 +675,6 @@ export function DeliveryWorkspaceShell({
                     </CollapsibleContent>
                   </SidebarMenuItem>
                 </Collapsible>
-
-                {!isAdmin ? (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      isActive={activeSection === 'apps'}
-                      onClick={() => openPath('/courier')}
-                      tooltip='Check Price'
-                      className='h-10 cursor-pointer text-sm hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground'
-                    >
-                      <Truck />
-                      <span>Check Price</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ) : null}
 
                 {!isAdmin ? (
                   <SidebarMenuItem>
@@ -921,7 +849,7 @@ export function DeliverySystemDashboard() {
   const [deliveryTarget, setDeliveryTarget] = useState<CourierOrderSummary | null>(null)
   const { config: appConfig } = useDeliveryAppConfig()
   const deliveryServices = useMemo(
-    () => DELIVERY_SERVICE_CATALOG.map((service) => applyDeliveryApps(service, appConfig)),
+    () => [D2C_DELIVERY_SERVICE, ...DELIVERY_SERVICE_CATALOG].map((service) => applyDeliveryApps(service, appConfig)),
     [appConfig]
   )
 
@@ -1110,7 +1038,7 @@ export function DeliverySystemDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className='grid gap-3 sm:grid-cols-3'>
+              <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
                 <div className='rounded-xl border border-border bg-muted/20 p-3'>
                   <PartnerLogo partner="delhivery" size="sm" />
                   <p className='mt-1 truncate text-xs text-muted-foreground'>All-India courier & surface shipping</p>
@@ -1122,6 +1050,10 @@ export function DeliverySystemDashboard() {
                 <div className='rounded-xl border border-border bg-muted/20 p-3'>
                   <PartnerLogo partner="porter" size="sm" />
                   <p className='mt-1 truncate text-xs text-muted-foreground'>Trucks, tempos & heavy goods logistics</p>
+                </div>
+                <div className='rounded-xl border border-border bg-muted/20 p-3'>
+                  <PartnerLogo partner="velocity" size="sm" />
+                  <p className='mt-1 truncate text-xs text-muted-foreground'>Aggregator rates across multiple courier networks</p>
                 </div>
               </div>
             </CardContent>
@@ -1220,16 +1152,17 @@ export function DeliverySystemDashboard() {
         />
       ) : null}
       <Dialog open={Boolean(deliveryTarget)} onOpenChange={(open) => { if (!open) setDeliveryTarget(null) }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Request delivery</DialogTitle>
-            <DialogDescription>
+        <DialogContent className='max-h-[calc(100dvh-2rem)] w-[calc(100%-1rem)] gap-0 overflow-y-auto rounded-2xl p-0 sm:max-w-4xl'>
+          <DialogHeader className='border-b bg-gradient-to-r from-violet-50 via-background to-blue-50 p-6 text-left dark:from-violet-950/30 dark:to-blue-950/20'>
+            <div className='mb-1 text-xs font-bold uppercase tracking-[0.16em] text-primary'>Choose delivery service</div>
+            <DialogTitle className='text-2xl'>Request delivery</DialogTitle>
+            <DialogDescription className='text-sm'>
               {deliveryTarget
                 ? `Choose a delivery type for ${deliveryTarget.orderNumber}.`
                 : 'Choose a delivery type.'}
             </DialogDescription>
           </DialogHeader>
-          <div className='grid gap-2'>
+          <div className='grid gap-4 p-5 md:grid-cols-2 md:p-6'>
             {deliveryServices.map((service) => {
               const Icon = service.icon
               return (
@@ -1241,23 +1174,24 @@ export function DeliverySystemDashboard() {
                     openPath(createDeliveryPath(service, { orderId: deliveryTarget.id }))
                     setDeliveryTarget(null)
                   }}
-                  className='flex items-center gap-3 rounded-lg border p-3 text-left transition hover:bg-muted/50'
+                  className='group flex min-w-0 flex-col rounded-2xl border bg-card p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md'
                 >
-                  <Icon className='size-5 shrink-0 text-primary' />
-                  <span className='min-w-0 flex-1'>
-                    <div className='flex items-center justify-between gap-2'>
-                      <span className='block text-sm font-semibold text-primary'>{service.badge}</span>
-                      {service.partners?.length ? (
-                        <div className='flex items-center gap-1'>
-                          {service.partners.map((p) => (
-                            <PartnerLogo key={p} partner={p} size="xs" badge />
-                          ))}
-                        </div>
-                      ) : null}
+                  <div className='flex items-start justify-between gap-3'>
+                    <span className='grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary'><Icon className='size-5' /></span>
+                    <span className='rounded-full bg-muted px-3 py-1 text-xs font-semibold text-primary'>{service.badge}</span>
+                  </div>
+                  <div className='mt-4 min-w-0'>
+                    <span className='block text-lg font-bold'>{service.title}</span>
+                    <span className='mt-1 block text-sm leading-relaxed text-muted-foreground'>{service.bestFor}</span>
+                  </div>
+                  {service.partners?.length ? (
+                    <div className='mt-4 flex min-w-0 flex-wrap gap-2 border-t pt-4'>
+                      {service.partners.map((partner) => (
+                        <PartnerLogo key={partner} partner={partner} size='xs' badge />
+                      ))}
                     </div>
-                    <span className='block text-sm font-medium'>{service.title}</span>
-                    <span className='block text-sm text-muted-foreground'>{service.bestFor}</span>
-                  </span>
+                  ) : null}
+                  <span className='mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary'>Continue <ArrowRight className='size-4 transition group-hover:translate-x-1' /></span>
                 </button>
               )
             })}

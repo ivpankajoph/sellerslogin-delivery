@@ -67,6 +67,7 @@ export function ManageAppsPanel() {
     new Set(services ? services[serviceKey] || [] : DEFAULT_DELIVERY_APPS[serviceKey] || [])
 
   const vehicleNames = (partner: string) => {
+    if (partner === "velocity") return []
     if (partner === "delhivery") {
       return [...new Map([...sheet.porter, ...sheet.shadowfax].map((vehicle) => [vehicle.name.toLowerCase(), vehicle.name])).values()]
     }
@@ -166,7 +167,7 @@ export function ManageAppsPanel() {
         ))}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {DELIVERY_APP_IDS.map((appId) => {
           const on = appsFor(serviceKey).has(appId)
           return (
@@ -212,7 +213,13 @@ export function ManageAppsPanel() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {vehicleNames(partner).length ? vehicleNames(partner).map((name) => {
+            {partner === "velocity" ? (
+              <TableRow>
+                <TableCell colSpan={3} className="text-muted-foreground">
+                  Velocity returns its courier partners and prices live, so there is no fixed vehicle list to configure.
+                </TableCell>
+              </TableRow>
+            ) : vehicleNames(partner).length ? vehicleNames(partner).map((name) => {
               const vehicle = [...sheet.porter, ...sheet.shadowfax].find((entry) => entry.name.toLowerCase() === name.toLowerCase())
               const on = cellOn(serviceKey, partner, name)
               return (

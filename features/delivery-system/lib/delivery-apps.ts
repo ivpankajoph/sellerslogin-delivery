@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import api from "@/lib/axios"
 
-export const DELIVERY_APP_IDS = ["delhivery", "shadowfax", "porter"] as const
+export const DELIVERY_APP_IDS = ["delhivery", "shadowfax", "porter", "velocity"] as const
 
 export type DeliveryAppId = (typeof DELIVERY_APP_IDS)[number]
 
@@ -12,6 +12,7 @@ export type DeliveryVehicleConfig = Record<string, Record<string, string[]>>
 export type SheetVehicle = { name: string; capacityKg: number }
 
 export const DELIVERY_APP_SERVICES = [
+  { key: "d2c", title: "All-India Courier", badge: "Parcel < 20kg" },
   { key: "quick_commerce", title: "Quick Commerce", badge: "Under 20kg" },
   { key: "hyperlocal", title: "Hyperlocal", badge: "Within city" },
   { key: "b2b", title: "B2C", badge: "Light < 750kg" },
@@ -19,6 +20,7 @@ export const DELIVERY_APP_SERVICES = [
 ] as const
 
 export const DEFAULT_DELIVERY_APPS: DeliveryAppConfig = {
+  d2c: ["delhivery", "shadowfax", "porter", "velocity"],
   quick_commerce: ["shadowfax"],
   hyperlocal: ["shadowfax"],
   b2b: ["porter", "shadowfax"],

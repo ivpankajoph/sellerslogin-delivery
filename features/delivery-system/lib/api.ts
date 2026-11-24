@@ -480,9 +480,34 @@ export type ShadowfaxWarehouse = {
   updatedAt?: string | null
 }
 
+export type VelocityWarehouse = {
+  id: string
+  provider: 'velocity'
+  warehouse_id: string
+  name: string
+  phone?: string
+  phone_number?: string
+  gst_no?: string
+  email?: string
+  contact?: string
+  contact_person?: string
+  address?: string
+  street_address?: string
+  city?: string
+  state?: string
+  pincode?: string
+  pin?: string
+  country?: string
+  working_days?: string[]
+  synced_at?: string | null
+  createdAt?: string | null
+  updatedAt?: string | null
+}
+
 export type CourierWarehouse =
   | (DelhiveryWarehouse & { provider: 'delhivery' })
   | ShadowfaxWarehouse
+  | VelocityWarehouse
 
 export const fetchDelhiveryWarehouses = async (
   params: Record<string, unknown> = {}
@@ -498,11 +523,17 @@ export const fetchShadowfaxWarehouses = async (
   return res?.data as { success?: boolean; warehouses?: ShadowfaxWarehouse[] }
 }
 
+export const fetchVelocityWarehouses = async () => {
+  const res = await api.get('/velocity/warehouses')
+  return res?.data as { success?: boolean; warehouses?: VelocityWarehouse[] }
+}
+
 export const fetchCourierWarehouses = async () => {
   return writeCached('warehouses', async () => {
-    const [delhiveryResult, shadowfaxResult] = await Promise.allSettled([
+    const [delhiveryResult, shadowfaxResult, velocityResult] = await Promise.allSettled([
       fetchDelhiveryWarehouses(),
       fetchShadowfaxWarehouses(),
+      fetchVelocityWarehouses(),
     ])
 
     const delhivery =
@@ -516,16 +547,28 @@ export const fetchCourierWarehouses = async () => {
       shadowfaxResult.status === 'fulfilled'
         ? shadowfaxResult.value?.warehouses || []
         : []
+    const velocity =
+      velocityResult.status === 'fulfilled'
+        ? velocityResult.value?.warehouses || []
+        : []
 
-    if (!delhivery.length && !shadowfax.length) {
-      const rejected = [delhiveryResult, shadowfaxResult].find(
+    if (!delhivery.length && !shadowfax.length && !velocity.length) {
+      const rejected = [delhiveryResult, shadowfaxResult, velocityResult].find(
         (result) => result.status === 'rejected'
       ) as PromiseRejectedResult | undefined
       if (rejected) throw rejected.reason
     }
 
-    return [...delhivery, ...shadowfax] as CourierWarehouse[]
+    return [...delhivery, ...shadowfax, ...velocity] as CourierWarehouse[]
   })
+}
+
+export const createVelocityWarehouse = async (
+  payload: Record<string, unknown>
+) => {
+  const res = await api.post('/velocity/warehouse', payload)
+  clearCourierApiCache()
+  return res?.data
 }
 
 export const createShadowfaxWarehouse = async (
@@ -624,6 +667,24 @@ export const cancelHyperlocalOrder = async (sfxOrderId: string, payload: Record<
   return res?.data
 }
 
+export const editHyperlocalOrder = async (sfxOrderId: string, payload: Record<string, unknown>) => {
+  const res = await api.put(
+    `/shadowfax/hyperlocal/orders/${encodeURIComponent(sfxOrderId)}/edit`,
+    payload,
+    ondemandTimeout
+  )
+  return res?.data
+}
+
+export const markHyperlocalDispatchReady = async (clientOrderId: string) => {
+  const res = await api.put(
+    `/shadowfax/hyperlocal/orders/${encodeURIComponent(clientOrderId)}/dispatch-ready`,
+    { shipment_ready_timestamp: new Date().toISOString() },
+    ondemandTimeout
+  )
+  return res?.data
+}
+
 export const validateQuickCommerceOrder = async (payload: Record<string, unknown>) => {
   const res = await api.post("/shadowfax/quick-commerce/validate", payload, ondemandTimeout)
   return res?.data
@@ -636,6 +697,11 @@ export const placeQuickCommerceOrder = async (payload: Record<string, unknown>) 
 
 export const markQuickCommerceReady = async (payload: Record<string, unknown>) => {
   const res = await api.post("/shadowfax/quick-commerce/orders/ready", payload, ondemandTimeout)
+  return res?.data
+}
+
+export const cancelQuickCommerceOrder = async (payload: Record<string, unknown>) => {
+  const res = await api.post('/shadowfax/quick-commerce/orders/cancel', payload, ondemandTimeout)
   return res?.data
 }
 

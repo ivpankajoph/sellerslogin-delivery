@@ -1,7 +1,7 @@
 "use client"
 
 import { useNavigate } from '@/lib/router'
-import { LoaderCircle, MapPin, Plus, Warehouse } from 'lucide-react'
+import { ArrowRight, LoaderCircle, LockKeyhole, MapPin, PencilLine, Plus, Warehouse } from 'lucide-react'
 import type { Dispatch, SetStateAction } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
@@ -32,6 +32,7 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   createDelhiveryWarehouse,
   createShadowfaxWarehouse,
+  createVelocityWarehouse,
   fetchCourierWarehouses,
   updateDelhiveryWarehouse,
   updateShadowfaxWarehouse,
@@ -73,6 +74,19 @@ type ShadowfaxWarehouseForm = {
   working_days: string[]
 }
 
+type VelocityWarehouseForm = {
+  name: string
+  phone_number: string
+  gst_no: string
+  email: string
+  contact_person: string
+  street_address: string
+  zip: string
+  city: string
+  state: string
+  country: string
+}
+
 const readText = (value: unknown) => String(value ?? '').trim()
 
 const defaultForm: WarehouseForm = {
@@ -106,6 +120,22 @@ const defaultShadowfaxForm: ShadowfaxWarehouseForm = {
   unique_code: '',
   working_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
 }
+
+const defaultVelocityForm: VelocityWarehouseForm = {
+  name: '',
+  phone_number: '',
+  gst_no: '',
+  email: '',
+  contact_person: '',
+  street_address: '',
+  zip: '',
+  city: '',
+  state: '',
+  country: 'India',
+}
+
+const providerLabel = (provider: string) =>
+  provider === 'shadowfax' ? 'Shadowfax' : provider === 'velocity' ? 'Velocity' : 'Delhivery'
 
 const WORKING_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -141,9 +171,10 @@ export function CourierWarehouseManagePage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [busy, setBusy] = useState<'create' | 'edit' | ''>('')
-  const [createProvider, setCreateProvider] = useState<'delhivery' | 'shadowfax' | ''>('')
+  const [createProvider, setCreateProvider] = useState<'delhivery' | 'shadowfax' | 'velocity' | ''>('')
   const [createForm, setCreateForm] = useState<WarehouseForm>(defaultForm)
   const [shadowfaxForm, setShadowfaxForm] = useState<ShadowfaxWarehouseForm>(defaultShadowfaxForm)
+  const [velocityForm, setVelocityForm] = useState<VelocityWarehouseForm>(defaultVelocityForm)
   const [editForm, setEditForm] = useState<WarehouseForm>(defaultForm)
   const [editShadowfaxForm, setEditShadowfaxForm] = useState<ShadowfaxWarehouseForm>(defaultShadowfaxForm)
   const [selected, setSelected] = useState<CourierWarehouse | null>(null)
@@ -190,7 +221,7 @@ export function CourierWarehouseManagePage() {
     setter(selected.includes(value) ? selected.filter((entry) => entry !== value) : [...selected, value])
   const visibleWarehouses = useMemo(
     () => orderedWarehouses.filter((warehouse) =>
-      matchesSelected(providers, warehouse.provider === 'shadowfax' ? 'Shadowfax' : 'Delhivery') &&
+      matchesSelected(providers, providerLabel(warehouse.provider)) &&
       matchesSelected(cities, warehouse.city || 'No city') &&
       matchesSelected(pins, warehouse.pin || 'No pin') &&
       matchesDateRange(warehouse.updatedAt, dateFrom, dateTo) &&
@@ -200,6 +231,45 @@ export function CourierWarehouseManagePage() {
   )
 
   const onCreate = async () => {
+    if (createProvider === 'velocity') {
+      if (!readText(velocityForm.name)) return toast.error('Warehouse name is required')
+      if (!/^\d{10}$/.test(readText(velocityForm.phone_number))) return toast.error('Enter a valid 10-digit phone number')
+      if (!/^\S+@\S+\.\S+$/.test(readText(velocityForm.email))) return toast.error('Enter a valid email address')
+      if (!readText(velocityForm.contact_person)) return toast.error('Contact person is required')
+      if (!readText(velocityForm.street_address)) return toast.error('Street address is required')
+      if (!/^\d{6}$/.test(readText(velocityForm.zip))) return toast.error('Enter a valid 6-digit pincode')
+      if (!readText(velocityForm.city)) return toast.error('City is required')
+      if (!readText(velocityForm.state)) return toast.error('State is required')
+
+      try {
+        setBusy('create')
+        await createVelocityWarehouse({
+          name: readText(velocityForm.name),
+          phone_number: readText(velocityForm.phone_number),
+          gst_no: readText(velocityForm.gst_no),
+          email: readText(velocityForm.email),
+          contact_person: readText(velocityForm.contact_person),
+          address_attributes: {
+            street_address: readText(velocityForm.street_address),
+            zip: readText(velocityForm.zip),
+            city: readText(velocityForm.city),
+            state: readText(velocityForm.state),
+            country: readText(velocityForm.country || 'India'),
+          },
+        })
+        toast.success('Velocity warehouse created')
+        setCreateOpen(false)
+        setCreateProvider('')
+        setVelocityForm(defaultVelocityForm)
+        await loadWarehouses()
+      } catch (err: any) {
+        toast.error(err?.response?.data?.message || 'Failed to create Velocity warehouse')
+      } finally {
+        setBusy('')
+      }
+      return
+    }
+
     if (createProvider === 'shadowfax') {
       if (!readText(shadowfaxForm.name)) return toast.error('Warehouse name is required')
       if (!readText(shadowfaxForm.contact)) return toast.error('Contact is required')
@@ -309,7 +379,7 @@ export function CourierWarehouseManagePage() {
             <div>
               <CardTitle>Warehouses</CardTitle>
               <CardDescription>
-                Create and edit vendor warehouses for Delhivery and Shadowfax.
+                Create pickup warehouses for Delhivery, Shadowfax, and Velocity.
               </CardDescription>
             </div>
             <Button
@@ -337,7 +407,7 @@ export function CourierWarehouseManagePage() {
             active={Boolean(warehouseSearch || dateFrom || dateTo || providers.length || cities.length || pins.length)}
             onReset={() => { setWarehouseSearch(''); setDateFrom(''); setDateTo(''); setProviders([]); setCities([]); setPins([]) }}
           >
-            <FacetFilter title="Provider" options={uniqueFilterOptions(orderedWarehouses.map((warehouse) => warehouse.provider === 'shadowfax' ? 'Shadowfax' : 'Delhivery'))} selected={providers} onToggle={(value) => toggleWarehouse(setProviders, providers, value)} onClear={() => setProviders([])} />
+            <FacetFilter title="Provider" options={uniqueFilterOptions(orderedWarehouses.map((warehouse) => providerLabel(warehouse.provider)))} selected={providers} onToggle={(value) => toggleWarehouse(setProviders, providers, value)} onClear={() => setProviders([])} />
             <FacetFilter title="City" options={uniqueFilterOptions(orderedWarehouses.map((warehouse) => warehouse.city || 'No city'))} selected={cities} onToggle={(value) => toggleWarehouse(setCities, cities, value)} onClear={() => setCities([])} />
             <FacetFilter title="Pin" options={uniqueFilterOptions(orderedWarehouses.map((warehouse) => warehouse.pin || 'No pin'))} selected={pins} onToggle={(value) => toggleWarehouse(setPins, pins, value)} onClear={() => setPins([])} />
           </TableFilters>
@@ -382,7 +452,15 @@ export function CourierWarehouseManagePage() {
                         : 'N/A'}
                     </TableCell>
                     <TableCell className='text-right'>
-                      <Button
+                      {warehouse.provider === 'velocity' ? (
+                        <Badge
+                          variant='secondary'
+                          className='whitespace-nowrap'
+                          title={`Velocity warehouse ${warehouse.warehouse_id} cannot be edited after creation`}
+                        >
+                          <LockKeyhole className='mr-1 size-3' />Create-only API
+                        </Badge>
+                      ) : <Button
                         variant='outline'
                         size='sm'
                         onClick={() => {
@@ -423,7 +501,7 @@ export function CourierWarehouseManagePage() {
                         }}
                       >
                         Edit
-                      </Button>
+                      </Button>}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -441,41 +519,58 @@ export function CourierWarehouseManagePage() {
           if (!open) {
             setReturnSameAsAbove(false)
             setCreateProvider('')
+            setVelocityForm(defaultVelocityForm)
           }
         }}
       >
-        <DialogContent className='w-[min(96vw,860px)] max-h-[90vh] overflow-y-auto rounded-md'>
-          <DialogHeader className='text-left'>
-            <DialogTitle>
+        <DialogContent className='w-[min(94vw,860px)] max-h-[90vh] gap-0 overflow-y-auto rounded-2xl p-0 sm:max-w-[860px]'>
+          <DialogHeader className='border-b bg-gradient-to-r from-violet-50 via-background to-blue-50 p-6 text-left dark:from-violet-950/30 dark:to-blue-950/20'>
+            <div className='mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary'><Warehouse className='size-4' />Pickup locations</div>
+            <DialogTitle className='text-2xl leading-tight'>
               {createProvider === 'shadowfax'
                 ? 'Create Shadowfax Warehouse'
+                : createProvider === 'velocity'
+                  ? 'Create Velocity Warehouse'
                 : createProvider === 'delhivery'
                   ? 'Create Delhivery Warehouse'
                   : 'Choose Warehouse Provider'}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className='max-w-2xl text-sm leading-relaxed'>
               {createProvider === 'shadowfax'
                 ? 'Stores Shadowfax pickup details after checking the pincode with Shadowfax serviceability API.'
+                : createProvider === 'velocity'
+                  ? 'Creates the pickup location through Velocity API and saves the returned warehouse ID.'
                 : createProvider === 'delhivery'
                   ? 'Calls Delhivery create warehouse API and syncs the response.'
                   : 'Select the delivery app first. The form changes based on the provider API.'}
             </DialogDescription>
           </DialogHeader>
+          <div className='p-6'>
           {!createProvider ? (
-            <div className='grid gap-3 sm:grid-cols-2'>
+            <div className='grid gap-4 sm:grid-cols-3'>
               <button
                 type='button'
-                className='flex items-center gap-3 rounded-md border border-sky-200 bg-sky-50 p-5 text-left hover:bg-sky-100 transition'
+                className='group flex min-h-48 flex-col rounded-2xl border border-sky-200 bg-sky-50/70 p-5 text-left transition hover:-translate-y-0.5 hover:border-sky-400 hover:shadow-lg dark:bg-sky-950/20'
                 onClick={() => setCreateProvider('delhivery')}
               >
-                <PartnerLogo partner="delhivery" size="lg" textClassName="text-lg font-semibold text-sky-900" />
+                <div className='flex w-full items-start justify-between'><span className='grid size-12 place-items-center rounded-xl bg-white shadow-sm dark:bg-background'><PartnerLogo partner="delhivery" size="md" showName={false} /></span><ArrowRight className='size-4 text-sky-700 transition group-hover:translate-x-1' /></div>
+                <div className='mt-auto'><h3 className='text-lg font-bold text-sky-950 dark:text-sky-100'>Delhivery</h3><p className='mt-1 text-xs leading-relaxed text-sky-800/70 dark:text-sky-200/70'>Direct warehouse sync with editable pickup details.</p><span className='mt-3 inline-flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-sky-800 dark:bg-background'><PencilLine className='size-3' />Create & edit</span></div>
               </button>
               <button
                 type='button'
-                className='flex items-center gap-3 rounded-md border border-orange-200 bg-orange-50 p-5 text-left hover:bg-orange-100 transition'
+                className='group flex min-h-48 flex-col rounded-2xl border border-orange-200 bg-orange-50/70 p-5 text-left transition hover:-translate-y-0.5 hover:border-orange-400 hover:shadow-lg dark:bg-orange-950/20'
                 onClick={() => setCreateProvider('shadowfax')}
               >
-                <PartnerLogo partner="shadowfax" size="lg" textClassName="text-lg font-semibold text-orange-900" />
+                <div className='flex w-full items-start justify-between'><span className='grid size-12 place-items-center rounded-xl bg-white shadow-sm dark:bg-background'><PartnerLogo partner="shadowfax" size="md" showName={false} /></span><ArrowRight className='size-4 text-orange-700 transition group-hover:translate-x-1' /></div>
+                <div className='mt-auto'><h3 className='text-lg font-bold text-orange-950 dark:text-orange-100'>Shadowfax</h3><p className='mt-1 text-xs leading-relaxed text-orange-800/70 dark:text-orange-200/70'>Serviceability-aware pickup location stored in SellersLogin.</p><span className='mt-3 inline-flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-orange-800 dark:bg-background'><PencilLine className='size-3' />Create & edit</span></div>
+              </button>
+              <button
+                type='button'
+                className='group flex min-h-48 flex-col rounded-2xl border border-violet-200 bg-violet-50/70 p-5 text-left transition hover:-translate-y-0.5 hover:border-violet-400 hover:shadow-lg dark:bg-violet-950/20'
+                onClick={() => setCreateProvider('velocity')}
+              >
+                <div className='flex w-full items-start justify-between'><span className='grid size-12 place-items-center rounded-xl bg-white shadow-sm dark:bg-background'><PartnerLogo partner="velocity" size="md" showName={false} /></span><ArrowRight className='size-4 text-violet-700 transition group-hover:translate-x-1' /></div>
+                <div className='mt-auto'><h3 className='text-lg font-bold text-violet-950 dark:text-violet-100'>Velocity</h3><p className='mt-1 text-xs leading-relaxed text-violet-800/70 dark:text-violet-200/70'>Creates a permanent API warehouse ID for carrier activation.</p><span className='mt-3 inline-flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-violet-800 dark:bg-background'><LockKeyhole className='size-3' />Create only</span></div>
               </button>
             </div>
           ) : createProvider === 'delhivery' ? (
@@ -534,16 +629,32 @@ export function CourierWarehouseManagePage() {
                 </>
               ) : null}
             </div>
-          ) : (
+          ) : createProvider === 'shadowfax' ? (
             <ShadowfaxWarehouseFields form={shadowfaxForm} setForm={setShadowfaxForm} />
+          ) : (
+            <div className='grid gap-3 sm:grid-cols-2'>
+              <div><Label>Warehouse name*</Label><Input value={velocityForm.name} onChange={(e) => setVelocityForm((c) => ({ ...c, name: e.target.value }))} placeholder='SBagga House Velocity' /></div>
+              <div><Label>Contact person*</Label><Input value={velocityForm.contact_person} onChange={(e) => setVelocityForm((c) => ({ ...c, contact_person: e.target.value }))} placeholder='Pickup contact name' /></div>
+              <div><Label>Phone*</Label><Input value={velocityForm.phone_number} onChange={(e) => setVelocityForm((c) => ({ ...c, phone_number: e.target.value.replace(/\D/g, '').slice(0, 10) }))} inputMode='numeric' placeholder='10-digit mobile' /></div>
+              <div><Label>Email*</Label><Input type='email' value={velocityForm.email} onChange={(e) => setVelocityForm((c) => ({ ...c, email: e.target.value }))} placeholder='pickup@example.com' /></div>
+              <div><Label>GST number (optional)</Label><Input value={velocityForm.gst_no} onChange={(e) => setVelocityForm((c) => ({ ...c, gst_no: e.target.value.toUpperCase() }))} /></div>
+              <div><Label>Country</Label><Input value={velocityForm.country} onChange={(e) => setVelocityForm((c) => ({ ...c, country: e.target.value }))} /></div>
+              <div className='sm:col-span-2'><Label>Street address*</Label><Textarea className='min-h-[78px]' value={velocityForm.street_address} onChange={(e) => setVelocityForm((c) => ({ ...c, street_address: e.target.value }))} placeholder='Complete pickup address' /></div>
+              <div><Label>Pincode*</Label><Input value={velocityForm.zip} onChange={(e) => setVelocityForm((c) => ({ ...c, zip: e.target.value.replace(/\D/g, '').slice(0, 6) }))} inputMode='numeric' /></div>
+              <div><Label>City*</Label><Input value={velocityForm.city} onChange={(e) => setVelocityForm((c) => ({ ...c, city: e.target.value }))} /></div>
+              <div className='sm:col-span-2'><Label>State*</Label><IndianStateSelect value={velocityForm.state} onChange={(value) => setVelocityForm((c) => ({ ...c, state: value }))} /></div>
+              <p className='sm:col-span-2 text-xs text-muted-foreground'>Velocity warehouse details cannot be edited after creation. A new warehouse receives its own API warehouse ID.</p>
+            </div>
           )}
-          <DialogFooter>
+          </div>
+          <DialogFooter className='border-t bg-muted/20 p-5'>
             <Button
               variant='outline'
               onClick={() => {
                 setCreateOpen(false)
                 setReturnSameAsAbove(false)
                 setCreateProvider('')
+                setVelocityForm(defaultVelocityForm)
               }}
             >
               Cancel

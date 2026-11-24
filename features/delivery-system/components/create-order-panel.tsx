@@ -39,6 +39,7 @@ import { formatINR } from "@/lib/currency"
 import { useDeliveryAppConfig } from "@/features/delivery-system/lib/delivery-apps"
 import { VehicleLogo } from "@/components/shared/vehicle-logo"
 import { PartnerLogo } from "@/components/shared/partner-logo"
+import { UnifiedCreateOrderPanel } from "@/features/delivery-system/components/unified-create-order-panel"
 
 type PorterOption = {
   vehicle: string
@@ -827,5 +828,5 @@ export function CreateOrderPanel(
   if (props.service.id === "local") {
     return <LocalShadowfaxPanel {...props} initialProduct={props.service.product} />
   }
-  return <ParcelCreateOrderPanel {...props} />
+  return <UnifiedCreateOrderPanel {...props} />
 }
